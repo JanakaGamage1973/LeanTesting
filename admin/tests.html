@@ -32,23 +32,23 @@
             <!-- Add Test Form -->
             <div id="add-test-form" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-6 hidden">
                 <h3 class="text-sm font-bold text-slate-800 mb-4" id="form-title">Create New Test</h3>
-                <form id="test-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <form id="test-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" autocomplete="off">
                     <input type="hidden" id="edit-test-id" value="" />
                     <div class="md:col-span-2 lg:col-span-3">
                         <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Test Name</label>
-                        <input type="text" id="test-name" required
+                        <input type="text" id="test-name" required autocomplete="off"
                             class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
                             placeholder="e.g., Lean Tools Basics" />
                     </div>
                     <div class="md:col-span-2 lg:col-span-3">
                         <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Description</label>
-                        <textarea id="test-desc" rows="2"
+                        <textarea id="test-desc" rows="2" autocomplete="off"
                             class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-none"
                             placeholder="Brief description of this test"></textarea>
                     </div>
                     <div>
                         <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Share Code</label>
-                        <input type="text" id="test-code" required pattern="[a-zA-Z0-9_-]+" title="Letters, numbers, hyphens and underscores only"
+                        <input type="text" id="test-code" required pattern="[a-zA-Z0-9_-]+" title="Letters, numbers, hyphens and underscores only" autocomplete="off"
                             class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
                             placeholder="e.g., LEAN001, 5S-2026" />
                         <p class="text-[10px] text-slate-400 mt-1">Unique code used in the shareable link</p>

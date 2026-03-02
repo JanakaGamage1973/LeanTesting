@@ -32,7 +32,7 @@
             <!-- Add User Form (hidden by default) -->
             <div id="add-user-form" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-6 hidden">
                 <h3 class="text-sm font-bold text-slate-800 mb-4">Create New User</h3>
-                <form id="user-form" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <form id="user-form" class="grid grid-cols-1 md:grid-cols-2 gap-4" autocomplete="off">
                     <div>
                         <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Username</label>
                         <input type="text" id="new-username" required pattern="[a-zA-Z0-9_]+" title="Letters, numbers, and underscores only"
