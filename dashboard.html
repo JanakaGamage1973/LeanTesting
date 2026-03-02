@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LeanTest - Available Tests</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: { extend: { colors: { primary: '#6366f1', 'primary-dark': '#4f46e5' } } }
+        }
+    </script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,-25" />
+    <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body class="bg-slate-50 min-h-screen">
+    <!-- Header -->
+    <header id="header" class="h-16 sticky top-0 bg-white/80 backdrop-blur-md border-b border-slate-100 z-40"></header>
+
+    <!-- Main Content -->
+    <main class="max-w-5xl mx-auto px-6 py-8 page-enter">
+        <div class="mb-6">
+            <h1 class="text-lg font-bold text-slate-800">Available Tests</h1>
+            <p class="text-[12px] text-slate-500 mt-1">Select a test to begin your assessment</p>
+        </div>
+
+        <div id="tests-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <!-- Loading skeleton -->
+            <div class="bg-white rounded-2xl border border-slate-100 p-6 animate-pulse">
+                <div class="h-4 bg-slate-100 rounded w-3/4 mb-3"></div>
+                <div class="h-3 bg-slate-100 rounded w-1/2 mb-4"></div>
+                <div class="h-8 bg-slate-100 rounded w-full"></div>
+            </div>
+        </div>
+
+        <div id="empty-state" class="hidden"></div>
+    </main>
+
+    <script type="module">
+        import { requireAuth, navigateTo, BASE_PATH } from './js/auth.js';
+        import { renderStudentHeader, initLogout, emptyState, badge } from './js/ui.js';
+        import { db } from './js/firebase-config.js';
+        import { collection, query, where, getDocs, orderBy } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
+
+        initLogout();
+
+        try {
+            const user = await requireAuth();
+            document.getElementById('header').innerHTML = renderStudentHeader(user);
+
+            // Fetch active tests
+            const testsSnap = await getDocs(query(
+                collection(db, 'tests'),
+                where('isActive', '==', true)
+            ));
+
+            const grid = document.getElementById('tests-grid');
+            const emptyEl = document.getElementById('empty-state');
+
+            if (testsSnap.empty) {
+                grid.classList.add('hidden');
+                emptyEl.classList.remove('hidden');
+                emptyEl.innerHTML = emptyState('quiz', 'No tests available', 'Your administrator will add tests soon');
+                return;
+            }
+
+            // Fetch user attempts to show stats
+            const attemptsSnap = await getDocs(query(
+                collection(db, 'attempts'),
+                where('userId', '==', user.uid)
+            ));
+            const attemptsByTest = {};
+            attemptsSnap.forEach(d => {
+                const data = d.data();
+                if (!attemptsByTest[data.testId]) attemptsByTest[data.testId] = [];
+                attemptsByTest[data.testId].push(data);
+            });
+
+            grid.innerHTML = testsSnap.docs.map(d => {
+                const test = d.data();
+                const testAttempts = attemptsByTest[d.id] || [];
+                const completed = testAttempts.filter(a => a.status !== 'in_progress');
+                const bestScore = completed.length > 0 ? Math.max(...completed.map(a => a.percentage)) : null;
+
+                return `
+                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 p-6 group relative overflow-hidden">
+                        ${bestScore !== null ? `<div class="status-bar ${bestScore >= 70 ? 'bg-emerald-500' : bestScore >= 50 ? 'bg-amber-500' : 'bg-red-500'}"></div>` : ''}
+                        <div class="flex items-start justify-between mb-3">
+                            <div>
+                                <h3 class="text-sm font-bold text-slate-800">${test.name}</h3>
+                                <p class="text-[11px] text-slate-400 mt-0.5">${test.description || ''}</p>
+                            </div>
+                            <span class="material-symbols-outlined text-slate-300 text-[20px] group-hover:text-primary transition-colors">arrow_forward</span>
+                        </div>
+                        <div class="flex items-center gap-3 text-[10px] text-slate-400 mb-4">
+                            <span class="flex items-center gap-1">
+                                <span class="material-symbols-outlined text-[14px]">help_outline</span>
+                                ${test.totalQuestions || 30} questions
+                            </span>
+                            <span class="flex items-center gap-1">
+                                <span class="material-symbols-outlined text-[14px]">timer</span>
+                                ${test.duration || 30} min
+                            </span>
+                        </div>
+                        ${completed.length > 0 ? `
+                            <div class="flex items-center gap-2 mb-4">
+                                <span class="text-[10px] text-slate-400">Best: ${badge(bestScore + '%', bestScore >= 70 ? 'emerald' : bestScore >= 50 ? 'amber' : 'red')}</span>
+                                <span class="text-[10px] text-slate-400">${completed.length} attempt${completed.length !== 1 ? 's' : ''}</span>
+                            </div>
+                        ` : ''}
+                        <a href="${BASE_PATH}/quiz.html?testId=${d.id}" class="block w-full bg-primary text-white text-center px-4 py-2 rounded-xl text-[11px] font-bold hover:bg-indigo-600 shadow-lg shadow-primary/20 transition-all">
+                            ${completed.length > 0 ? 'Retake Test' : 'Start Test'}
+                        </a>
+                    </div>`;
+            }).join('');
+
+        } catch (e) {
+            console.error(e);
+        }
+    </script>
+</body>
+</html>

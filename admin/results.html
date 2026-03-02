@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LeanTest - All Results</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: { extend: { colors: { primary: '#6366f1', 'primary-dark': '#4f46e5' } } }
+        }
+    </script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,-25" />
+    <link rel="stylesheet" href="../css/styles.css" />
+</head>
+<body class="bg-slate-50 min-h-screen flex">
+    <aside id="sidebar" class="w-52 bg-white border-r border-slate-100 fixed h-screen overflow-y-auto"></aside>
+    <div class="flex-1 ml-52">
+        <header id="header" class="h-16 sticky top-0 bg-white/80 backdrop-blur-md border-b border-slate-100 z-40"></header>
+        <main class="p-6 page-enter">
+            <div class="flex items-center justify-between mb-6">
+                <h1 class="text-lg font-bold text-slate-800">Results</h1>
+                <button id="export-btn" class="border border-slate-200 text-slate-500 px-4 py-2 rounded-xl text-[11px] font-medium hover:bg-slate-50 transition-colors flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[16px]">download</span>
+                    Export CSV
+                </button>
+            </div>
+
+            <!-- Stats -->
+            <div id="stats" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
+
+            <!-- Filters -->
+            <div class="flex items-center gap-3 mb-4 flex-wrap">
+                <div>
+                    <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1">Test</label>
+                    <select id="filter-test" class="border border-slate-200 rounded-xl px-3 py-1.5 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                        <option value="">All Tests</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1">User</label>
+                    <select id="filter-user" class="border border-slate-200 rounded-xl px-3 py-1.5 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                        <option value="">All Users</option>
+                    </select>
+                </div>
+                <div class="ml-auto self-end">
+                    <span id="result-count" class="text-[10px] text-slate-400"></span>
+                </div>
+            </div>
+
+            <!-- Results Table -->
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div class="max-h-[600px] overflow-y-auto">
+                    <table class="w-full">
+                        <thead class="sticky top-0 bg-white z-10">
+                            <tr class="border-b border-slate-100">
+                                <th class="text-left text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4">Student</th>
+                                <th class="text-left text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4">Test</th>
+                                <th class="text-left text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4">Score</th>
+                                <th class="text-left text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4">Percentage</th>
+                                <th class="text-left text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4">Time</th>
+                                <th class="text-left text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4">Status</th>
+                                <th class="text-left text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4">Date</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-table"></tbody>
+                    </table>
+                </div>
+                <div id="empty-results" class="hidden"></div>
+            </div>
+        </main>
+    </div>
+
+    <script type="module">
+        import { requireAdmin, BASE_PATH } from '../js/auth.js';
+        import { renderAdminSidebar, renderHeader, initLogout, statCard, badge, emptyState } from '../js/ui.js';
+        import { db } from '../js/firebase-config.js';
+        import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
+
+        initLogout();
+        let allAttempts = [], userMap = {}, testMap = {};
+
+        try {
+            const user = await requireAdmin();
+            document.getElementById('sidebar').innerHTML = renderAdminSidebar('results');
+            document.getElementById('header').innerHTML = renderHeader(user, 'Admin / Results');
+
+            // Load all data
+            const [usersSnap, testsSnap, attemptsSnap] = await Promise.all([
+                getDocs(collection(db, 'users')),
+                getDocs(collection(db, 'tests')),
+                getDocs(collection(db, 'attempts'))
+            ]);
+
+            usersSnap.forEach(d => { userMap[d.id] = d.data(); });
+            testsSnap.forEach(d => { testMap[d.id] = d.data(); });
+            attemptsSnap.forEach(d => {
+                const data = d.data();
+                if (data.status !== 'in_progress') allAttempts.push({ id: d.id, ...data });
+            });
+
+            // Populate filters
+            const testOpts = Object.entries(testMap).map(([id, t]) => `<option value="${id}">${t.name}</option>`).join('');
+            document.getElementById('filter-test').innerHTML = '<option value="">All Tests</option>' + testOpts;
+
+            const studentUsers = Object.entries(userMap).filter(([, u]) => u.role === 'student');
+            const userOpts = studentUsers.map(([id, u]) => `<option value="${id}">${u.displayName || u.username}</option>`).join('');
+            document.getElementById('filter-user').innerHTML = '<option value="">All Users</option>' + userOpts;
+
+            renderResults();
+            renderStats();
+        } catch (e) { console.error(e); }
+
+        document.getElementById('filter-test').addEventListener('change', () => { renderResults(); renderStats(); });
+        document.getElementById('filter-user').addEventListener('change', () => { renderResults(); renderStats(); });
+
+        function getFiltered() {
+            const testFilter = document.getElementById('filter-test').value;
+            const userFilter = document.getElementById('filter-user').value;
+            return allAttempts.filter(a => {
+                if (testFilter && a.testId !== testFilter) return false;
+                if (userFilter && a.userId !== userFilter) return false;
+                return true;
+            });
+        }
+
+        function renderStats() {
+            const filtered = getFiltered();
+            const avg = filtered.length > 0 ? Math.round(filtered.reduce((s, a) => s + a.percentage, 0) / filtered.length) : 0;
+            const best = filtered.length > 0 ? Math.max(...filtered.map(a => a.percentage)) : 0;
+            const passRate = filtered.length > 0 ? Math.round((filtered.filter(a => a.percentage >= 70).length / filtered.length) * 100) : 0;
+
+            document.getElementById('stats').innerHTML = [
+                statCard('assignment', filtered.length, 'Total Attempts'),
+                statCard('percent', avg + '%', 'Average Score'),
+                statCard('emoji_events', best + '%', 'Highest Score'),
+                statCard('check_circle', passRate + '%', 'Pass Rate')
+            ].join('');
+        }
+
+        function renderResults() {
+            const filtered = getFiltered();
+            const tbody = document.getElementById('results-table');
+            const emptyEl = document.getElementById('empty-results');
+
+            document.getElementById('result-count').textContent = `${filtered.length} results`;
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '';
+                emptyEl.classList.remove('hidden');
+                emptyEl.innerHTML = emptyState('assessment', 'No results found');
+                return;
+            }
+            emptyEl.classList.add('hidden');
+
+            // Sort by date desc
+            filtered.sort((a, b) => (b.completedAt?.seconds || 0) - (a.completedAt?.seconds || 0));
+
+            tbody.innerHTML = filtered.map(a => {
+                const u = userMap[a.userId];
+                const t = testMap[a.testId];
+                const date = a.completedAt ? new Date(a.completedAt.seconds * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A';
+                const min = Math.floor(a.timeTaken / 60);
+                const sec = a.timeTaken % 60;
+
+                return `
+                    <tr class="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                        <td class="p-4">
+                            <div class="flex items-center gap-2">
+                                <div class="size-7 rounded-full bg-primary/10 flex items-center justify-center">
+                                    <span class="material-symbols-outlined text-primary text-[12px]">person</span>
+                                </div>
+                                <span class="text-[12px] font-medium text-slate-700">${u?.displayName || u?.username || 'Unknown'}</span>
+                            </div>
+                        </td>
+                        <td class="p-4 text-[12px] text-slate-600">${t?.name || 'Unknown'}</td>
+                        <td class="p-4 text-[12px] font-bold text-slate-800">${a.score}/${a.totalQuestions}</td>
+                        <td class="p-4">${badge(a.percentage + '%', a.percentage >= 70 ? 'emerald' : a.percentage >= 50 ? 'amber' : 'red')}</td>
+                        <td class="p-4 text-[12px] text-slate-500">${min}m ${sec}s</td>
+                        <td class="p-4">${badge(a.status === 'timed_out' ? 'Timed Out' : 'Completed', a.status === 'timed_out' ? 'amber' : 'emerald')}</td>
+                        <td class="p-4 text-[11px] text-slate-500">${date}</td>
+                    </tr>`;
+            }).join('');
+        }
+
+        // Export CSV
+        document.getElementById('export-btn').addEventListener('click', () => {
+            const filtered = getFiltered();
+            if (filtered.length === 0) return;
+
+            const rows = [['Student', 'Username', 'Test', 'Score', 'Total', 'Percentage', 'Time (s)', 'Status', 'Date']];
+            filtered.forEach(a => {
+                const u = userMap[a.userId];
+                const t = testMap[a.testId];
+                const date = a.completedAt ? new Date(a.completedAt.seconds * 1000).toISOString() : '';
+                rows.push([
+                    u?.displayName || '', u?.username || '', t?.name || '',
+                    a.score, a.totalQuestions, a.percentage, a.timeTaken, a.status, date
+                ]);
+            });
+
+            const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `results_${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+    </script>
+</body>
+</html>

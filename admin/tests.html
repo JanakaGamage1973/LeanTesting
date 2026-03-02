@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LeanTest - Test Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: { extend: { colors: { primary: '#6366f1', 'primary-dark': '#4f46e5' } } }
+        }
+    </script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,-25" />
+    <link rel="stylesheet" href="../css/styles.css" />
+</head>
+<body class="bg-slate-50 min-h-screen flex">
+    <aside id="sidebar" class="w-52 bg-white border-r border-slate-100 fixed h-screen overflow-y-auto"></aside>
+    <div class="flex-1 ml-52">
+        <header id="header" class="h-16 sticky top-0 bg-white/80 backdrop-blur-md border-b border-slate-100 z-40"></header>
+        <main class="p-6 page-enter">
+            <div class="flex items-center justify-between mb-6">
+                <h1 class="text-lg font-bold text-slate-800">Tests</h1>
+                <button id="add-test-btn" class="bg-primary text-white px-4 py-2 rounded-xl text-[11px] font-bold hover:bg-indigo-600 shadow-lg shadow-primary/20 transition-all flex items-center gap-2">
+                    <span class="material-symbols-outlined text-[16px]">add</span>
+                    Create Test
+                </button>
+            </div>
+
+            <!-- Add Test Form -->
+            <div id="add-test-form" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-6 hidden">
+                <h3 class="text-sm font-bold text-slate-800 mb-4" id="form-title">Create New Test</h3>
+                <form id="test-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <input type="hidden" id="edit-test-id" value="" />
+                    <div class="md:col-span-2 lg:col-span-3">
+                        <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Test Name</label>
+                        <input type="text" id="test-name" required
+                            class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                            placeholder="e.g., Lean Tools Basics" />
+                    </div>
+                    <div class="md:col-span-2 lg:col-span-3">
+                        <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Description</label>
+                        <textarea id="test-desc" rows="2"
+                            class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-none"
+                            placeholder="Brief description of this test"></textarea>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Duration (minutes)</label>
+                        <input type="number" id="test-duration" value="30" min="5" max="120"
+                            class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Total Questions</label>
+                        <input type="number" id="test-total" value="30" min="1" max="100"
+                            class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Status</label>
+                        <select id="test-status" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                            <option value="true">Active</option>
+                            <option value="false">Inactive</option>
+                        </select>
+                    </div>
+
+                    <!-- Difficulty Distribution -->
+                    <div class="md:col-span-2 lg:col-span-3 border-t border-slate-100 pt-4 mt-2">
+                        <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-3">Question Distribution</label>
+                        <div class="grid grid-cols-3 gap-4">
+                            <div>
+                                <label class="text-[10px] text-emerald-600 font-bold block mb-1">Easy (40%)</label>
+                                <input type="number" id="test-easy" value="12" min="0"
+                                    class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-amber-600 font-bold block mb-1">Medium (30%)</label>
+                                <input type="number" id="test-medium" value="9" min="0"
+                                    class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+                            </div>
+                            <div>
+                                <label class="text-[10px] text-red-600 font-bold block mb-1">Hard (30%)</label>
+                                <input type="number" id="test-hard" value="9" min="0"
+                                    class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+                            </div>
+                        </div>
+                        <p id="dist-warning" class="text-[10px] text-amber-600 mt-2 hidden"></p>
+                    </div>
+
+                    <div class="md:col-span-2 lg:col-span-3 flex items-center gap-3">
+                        <button type="submit" id="save-test-btn" class="bg-primary text-white px-4 py-2 rounded-xl text-[11px] font-bold hover:bg-indigo-600 transition-colors flex items-center gap-2">
+                            <span class="material-symbols-outlined text-[16px]">check</span>
+                            <span>Save Test</span>
+                        </button>
+                        <button type="button" id="cancel-test" class="border border-slate-200 text-slate-500 px-4 py-2 rounded-xl text-[11px] font-medium hover:bg-slate-50 transition-colors">Cancel</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Tests List -->
+            <div id="tests-list" class="space-y-4"></div>
+            <div id="empty-tests" class="hidden"></div>
+        </main>
+    </div>
+
+    <script type="module">
+        import { requireAdmin, BASE_PATH } from '../js/auth.js';
+        import { renderAdminSidebar, renderHeader, initLogout, showToast, badge, difficultyBadge, emptyState } from '../js/ui.js';
+        import { db } from '../js/firebase-config.js';
+        import { collection, getDocs, doc, setDoc, updateDoc, query, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
+
+        initLogout();
+        let adminUser;
+
+        try {
+            adminUser = await requireAdmin();
+            document.getElementById('sidebar').innerHTML = renderAdminSidebar('tests');
+            document.getElementById('header').innerHTML = renderHeader(adminUser, 'Admin / Tests');
+            await loadTests();
+        } catch (e) { console.error(e); }
+
+        // Validate distribution
+        function validateDistribution() {
+            const total = parseInt(document.getElementById('test-total').value) || 0;
+            const easy = parseInt(document.getElementById('test-easy').value) || 0;
+            const medium = parseInt(document.getElementById('test-medium').value) || 0;
+            const hard = parseInt(document.getElementById('test-hard').value) || 0;
+            const sum = easy + medium + hard;
+            const warn = document.getElementById('dist-warning');
+            if (sum !== total) {
+                warn.textContent = `Distribution total (${sum}) does not match total questions (${total})`;
+                warn.classList.remove('hidden');
+            } else {
+                warn.classList.add('hidden');
+            }
+        }
+        ['test-total', 'test-easy', 'test-medium', 'test-hard'].forEach(id => {
+            document.getElementById(id).addEventListener('input', validateDistribution);
+        });
+
+        // Auto-calculate distribution
+        document.getElementById('test-total').addEventListener('input', () => {
+            const total = parseInt(document.getElementById('test-total').value) || 30;
+            const easy = Math.round(total * 0.4);
+            const medium = Math.round(total * 0.3);
+            const hard = total - easy - medium;
+            document.getElementById('test-easy').value = easy;
+            document.getElementById('test-medium').value = medium;
+            document.getElementById('test-hard').value = hard;
+            validateDistribution();
+        });
+
+        document.getElementById('add-test-btn').addEventListener('click', () => {
+            document.getElementById('edit-test-id').value = '';
+            document.getElementById('form-title').textContent = 'Create New Test';
+            document.getElementById('test-form').reset();
+            document.getElementById('test-duration').value = 30;
+            document.getElementById('test-total').value = 30;
+            document.getElementById('test-easy').value = 12;
+            document.getElementById('test-medium').value = 9;
+            document.getElementById('test-hard').value = 9;
+            document.getElementById('add-test-form').classList.remove('hidden');
+        });
+
+        document.getElementById('cancel-test').addEventListener('click', () => {
+            document.getElementById('add-test-form').classList.add('hidden');
+        });
+
+        document.getElementById('test-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('save-test-btn');
+            btn.disabled = true;
+
+            try {
+                const editId = document.getElementById('edit-test-id').value;
+                const data = {
+                    name: document.getElementById('test-name').value.trim(),
+                    description: document.getElementById('test-desc').value.trim(),
+                    duration: parseInt(document.getElementById('test-duration').value),
+                    totalQuestions: parseInt(document.getElementById('test-total').value),
+                    easyCount: parseInt(document.getElementById('test-easy').value),
+                    mediumCount: parseInt(document.getElementById('test-medium').value),
+                    hardCount: parseInt(document.getElementById('test-hard').value),
+                    isActive: document.getElementById('test-status').value === 'true'
+                };
+
+                if (editId) {
+                    await updateDoc(doc(db, 'tests', editId), data);
+                    showToast('Test updated', 'success');
+                } else {
+                    const ref = doc(collection(db, 'tests'));
+                    await setDoc(ref, { ...data, createdAt: serverTimestamp(), createdBy: adminUser.uid });
+                    showToast('Test created', 'success');
+                }
+
+                document.getElementById('add-test-form').classList.add('hidden');
+                document.getElementById('test-form').reset();
+                await loadTests();
+            } catch (err) {
+                showToast('Failed to save test', 'error');
+                console.error(err);
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        async function loadTests() {
+            const [testsSnap, questionsSnap, attemptsSnap] = await Promise.all([
+                getDocs(collection(db, 'tests')),
+                getDocs(collection(db, 'questions')),
+                getDocs(collection(db, 'attempts'))
+            ]);
+
+            const listEl = document.getElementById('tests-list');
+            const emptyEl = document.getElementById('empty-tests');
+
+            if (testsSnap.empty) {
+                listEl.innerHTML = '';
+                emptyEl.classList.remove('hidden');
+                emptyEl.innerHTML = emptyState('quiz', 'No tests yet', 'Create your first test to get started');
+                return;
+            }
+            emptyEl.classList.add('hidden');
+
+            // Count questions per test per difficulty
+            const qCount = {};
+            questionsSnap.forEach(d => {
+                const data = d.data();
+                if (!data.isActive) return;
+                if (!qCount[data.testId]) qCount[data.testId] = { easy: 0, medium: 0, hard: 0, total: 0 };
+                qCount[data.testId][data.difficulty]++;
+                qCount[data.testId].total++;
+            });
+
+            // Count attempts per test
+            const aCount = {};
+            attemptsSnap.forEach(d => {
+                const data = d.data();
+                if (data.status === 'in_progress') return;
+                if (!aCount[data.testId]) aCount[data.testId] = { count: 0, totalPct: 0 };
+                aCount[data.testId].count++;
+                aCount[data.testId].totalPct += data.percentage;
+            });
+
+            listEl.innerHTML = testsSnap.docs.map(d => {
+                const test = d.data();
+                const qc = qCount[d.id] || { easy: 0, medium: 0, hard: 0, total: 0 };
+                const ac = aCount[d.id] || { count: 0, totalPct: 0 };
+                const avgPct = ac.count > 0 ? Math.round(ac.totalPct / ac.count) : 0;
+                const date = test.createdAt ? new Date(test.createdAt.seconds * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A';
+
+                return `
+                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 hover:shadow-md transition-all duration-300">
+                        <div class="flex items-start justify-between mb-4">
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <h3 class="text-sm font-bold text-slate-800">${test.name}</h3>
+                                    ${badge(test.isActive ? 'Active' : 'Inactive', test.isActive ? 'emerald' : 'slate')}
+                                </div>
+                                <p class="text-[11px] text-slate-400 mt-1">${test.description || 'No description'}</p>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <button onclick="window.__editTest('${d.id}')" class="size-8 rounded-full hover:bg-slate-100 flex items-center justify-center transition-colors" title="Edit">
+                                    <span class="material-symbols-outlined text-slate-400 text-[16px]">edit</span>
+                                </button>
+                                <button onclick="window.__toggleTest('${d.id}', ${!test.isActive})" class="size-8 rounded-full hover:bg-slate-100 flex items-center justify-center transition-colors" title="${test.isActive ? 'Deactivate' : 'Activate'}">
+                                    <span class="material-symbols-outlined text-[16px] ${test.isActive ? 'text-slate-400' : 'text-emerald-500'}">${test.isActive ? 'visibility_off' : 'visibility'}</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
+                            <div>
+                                <div class="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Duration</div>
+                                <div class="text-sm font-bold text-slate-800">${test.duration}m</div>
+                            </div>
+                            <div>
+                                <div class="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Questions</div>
+                                <div class="text-sm font-bold text-slate-800">${qc.total}</div>
+                            </div>
+                            <div>
+                                <div class="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Distribution</div>
+                                <div class="flex items-center justify-center gap-1 mt-1">
+                                    ${difficultyBadge('easy')} <span class="text-[10px] text-slate-400">${qc.easy}</span>
+                                    ${difficultyBadge('medium')} <span class="text-[10px] text-slate-400">${qc.medium}</span>
+                                    ${difficultyBadge('hard')} <span class="text-[10px] text-slate-400">${qc.hard}</span>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Attempts</div>
+                                <div class="text-sm font-bold text-slate-800">${ac.count}</div>
+                            </div>
+                            <div>
+                                <div class="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Avg Score</div>
+                                <div class="text-sm font-bold ${avgPct >= 70 ? 'text-emerald-600' : avgPct >= 50 ? 'text-amber-600' : 'text-red-600'}">${ac.count > 0 ? avgPct + '%' : '-'}</div>
+                            </div>
+                        </div>
+                        <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                            <span class="text-[10px] text-slate-400">Created ${date}</span>
+                            <a href="${BASE_PATH}/admin/questions.html?testId=${d.id}" class="text-[11px] text-primary font-medium hover:underline flex items-center gap-1">
+                                Manage Questions <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+                            </a>
+                        </div>
+                    </div>`;
+            }).join('');
+        }
+
+        window.__editTest = async (testId) => {
+            const { getDoc: gd, doc: d } = await import('https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js');
+            const snap = await gd(d(db, 'tests', testId));
+            if (!snap.exists()) return;
+            const test = snap.data();
+
+            document.getElementById('edit-test-id').value = testId;
+            document.getElementById('form-title').textContent = 'Edit Test';
+            document.getElementById('test-name').value = test.name;
+            document.getElementById('test-desc').value = test.description || '';
+            document.getElementById('test-duration').value = test.duration;
+            document.getElementById('test-total').value = test.totalQuestions;
+            document.getElementById('test-easy').value = test.easyCount;
+            document.getElementById('test-medium').value = test.mediumCount;
+            document.getElementById('test-hard').value = test.hardCount;
+            document.getElementById('test-status').value = test.isActive ? 'true' : 'false';
+            document.getElementById('add-test-form').classList.remove('hidden');
+            document.getElementById('add-test-form').scrollIntoView({ behavior: 'smooth' });
+        };
+
+        window.__toggleTest = async (testId, newStatus) => {
+            try {
+                await updateDoc(doc(db, 'tests', testId), { isActive: newStatus });
+                showToast(`Test ${newStatus ? 'activated' : 'deactivated'}`, 'success');
+                await loadTests();
+            } catch (e) {
+                showToast('Failed to update test', 'error');
+            }
+        };
+    </script>
+</body>
+</html>

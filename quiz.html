@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LeanTest - Quiz</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: { extend: { colors: { primary: '#6366f1', 'primary-dark': '#4f46e5' } } }
+        }
+    </script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,-25" />
+    <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body class="bg-slate-50 min-h-screen">
+    <!-- Quiz Header -->
+    <header class="h-16 sticky top-0 bg-white/80 backdrop-blur-md border-b border-slate-100 z-40">
+        <div class="flex items-center justify-between h-full px-6 max-w-5xl mx-auto">
+            <div class="flex items-center gap-3">
+                <div class="size-10 bg-gradient-to-br from-primary to-indigo-600 rounded-xl flex items-center justify-center">
+                    <span class="material-symbols-outlined text-white text-[20px]">school</span>
+                </div>
+                <div>
+                    <div id="test-name" class="text-sm font-bold text-slate-800">Loading...</div>
+                    <div id="question-counter" class="text-[10px] text-slate-400 font-medium">Question 1 of 30</div>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <div id="timer" class="flex items-center gap-2 bg-slate-50 px-4 py-2 rounded-xl">
+                    <span class="material-symbols-outlined text-[18px] text-slate-500">timer</span>
+                    <span id="timer-display" class="text-sm font-bold text-slate-800 tabular-nums">30:00</span>
+                </div>
+                <button id="submit-btn" class="bg-primary text-white px-4 py-2 rounded-xl text-[11px] font-bold hover:bg-indigo-600 shadow-lg shadow-primary/20 transition-all hidden">
+                    Submit Test
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Loading State -->
+    <div id="loading" class="flex flex-col items-center justify-center py-20">
+        <span class="material-symbols-outlined text-primary text-4xl animate-spin mb-4">progress_activity</span>
+        <p class="text-sm font-medium text-slate-400">Preparing your test...</p>
+    </div>
+
+    <!-- Quiz Content -->
+    <main id="quiz-content" class="max-w-3xl mx-auto px-6 py-8 page-enter hidden">
+        <!-- Question Card -->
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-6">
+            <div class="flex items-center gap-2 mb-4">
+                <span id="difficulty-badge"></span>
+                <span id="question-number" class="text-[10px] text-slate-400 font-medium"></span>
+            </div>
+            <h2 id="question-text" class="text-sm font-bold text-slate-800 leading-relaxed mb-6"></h2>
+            <div id="options" class="space-y-3"></div>
+        </div>
+
+        <!-- Navigation -->
+        <div class="flex items-center justify-between">
+            <button id="prev-btn" class="flex items-center gap-2 border border-slate-200 text-slate-500 px-4 py-2 rounded-xl text-[11px] font-medium hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                <span class="material-symbols-outlined text-[16px]">arrow_back</span>
+                Previous
+            </button>
+            <button id="next-btn" class="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-xl text-[11px] font-bold hover:bg-indigo-600 shadow-lg shadow-primary/20 transition-all">
+                Next
+                <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+            </button>
+        </div>
+
+        <!-- Question Grid -->
+        <div class="mt-6 bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+            <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Questions</div>
+            <div id="question-grid" class="grid grid-cols-10 gap-2"></div>
+            <div class="flex items-center gap-4 mt-4 pt-3 border-t border-slate-100">
+                <span class="flex items-center gap-1.5 text-[10px] text-slate-400">
+                    <span class="size-3 rounded bg-primary"></span> Current
+                </span>
+                <span class="flex items-center gap-1.5 text-[10px] text-slate-400">
+                    <span class="size-3 rounded bg-emerald-500"></span> Answered
+                </span>
+                <span class="flex items-center gap-1.5 text-[10px] text-slate-400">
+                    <span class="size-3 rounded bg-slate-200"></span> Unanswered
+                </span>
+            </div>
+        </div>
+    </main>
+
+    <script type="module">
+        import { requireAuth, navigateTo, BASE_PATH } from './js/auth.js';
+        import { db } from './js/firebase-config.js';
+        import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
+        import { selectQuestions, QuizTimer, createAttempt, submitAttempt, saveQuizState, loadQuizState, clearQuizState } from './js/quiz-engine.js';
+        import { showToast, showModal, difficultyBadge } from './js/ui.js';
+
+        const params = new URLSearchParams(window.location.search);
+        const testId = params.get('testId');
+
+        if (!testId) {
+            navigateTo('/dashboard.html');
+        }
+
+        let user, test, questions, answers, timer, attemptId;
+        let currentIndex = 0;
+
+        try {
+            user = await requireAuth();
+
+            // Fetch test config
+            const testDoc = await getDoc(doc(db, 'tests', testId));
+            if (!testDoc.exists()) {
+                showToast('Test not found', 'error');
+                navigateTo('/dashboard.html');
+            }
+            test = testDoc.data();
+            document.getElementById('test-name').textContent = test.name;
+
+            // Select questions
+            questions = await selectQuestions(testId, test);
+            if (questions.length === 0) {
+                showToast('No questions available for this test', 'error');
+                navigateTo('/dashboard.html');
+            }
+
+            // Create attempt
+            const attempt = await createAttempt(user.uid, testId, questions);
+            attemptId = attempt.id;
+            answers = attempt.answers;
+
+            // Init timer
+            const duration = test.duration || 30;
+            timer = new QuizTimer(duration, onTimerTick, onTimerExpire);
+
+            // Show quiz
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('quiz-content').classList.remove('hidden');
+            document.getElementById('submit-btn').classList.remove('hidden');
+
+            renderQuestion();
+            renderGrid();
+            timer.start();
+
+        } catch (e) {
+            console.error(e);
+        }
+
+        function onTimerTick(seconds) {
+            const display = document.getElementById('timer-display');
+            const container = document.getElementById('timer');
+            const m = String(Math.floor(seconds / 60)).padStart(2, '0');
+            const s = String(seconds % 60).padStart(2, '0');
+            display.textContent = `${m}:${s}`;
+
+            if (seconds <= 60) {
+                container.classList.add('bg-red-50');
+                container.classList.remove('bg-slate-50');
+                display.classList.add('text-red-600', 'timer-warning');
+                display.classList.remove('text-slate-800');
+            } else if (seconds <= 300) {
+                container.classList.add('bg-amber-50');
+                container.classList.remove('bg-slate-50');
+                display.classList.add('text-amber-600');
+                display.classList.remove('text-slate-800');
+            }
+
+            // Auto-save every 30 seconds
+            if (seconds % 30 === 0) {
+                saveQuizState(attemptId, answers, seconds, questions.map(q => q.id));
+            }
+        }
+
+        function onTimerExpire() {
+            doSubmit(true);
+        }
+
+        function renderQuestion() {
+            const q = questions[currentIndex];
+            const a = answers[currentIndex];
+
+            document.getElementById('question-counter').textContent = `Question ${currentIndex + 1} of ${questions.length}`;
+            document.getElementById('question-number').textContent = `Question ${currentIndex + 1}`;
+            document.getElementById('difficulty-badge').innerHTML = difficultyBadge(q.difficulty);
+            document.getElementById('question-text').textContent = q.question;
+
+            const options = ['A', 'B', 'C', 'D'];
+            const optionKeys = ['optionA', 'optionB', 'optionC', 'optionD'];
+            document.getElementById('options').innerHTML = options.map((letter, i) => `
+                <div class="quiz-option">
+                    <input type="radio" name="answer" id="opt-${letter}" value="${letter}" ${a.selectedAnswer === letter ? 'checked' : ''} />
+                    <label for="opt-${letter}">
+                        <span class="option-letter">${letter}</span>
+                        <span>${q[optionKeys[i]]}</span>
+                    </label>
+                </div>
+            `).join('');
+
+            // Bind option clicks
+            document.querySelectorAll('input[name="answer"]').forEach(input => {
+                input.addEventListener('change', () => {
+                    answers[currentIndex].selectedAnswer = input.value;
+                    renderGrid();
+                });
+            });
+
+            // Navigation buttons
+            document.getElementById('prev-btn').disabled = currentIndex === 0;
+            const nextBtn = document.getElementById('next-btn');
+            if (currentIndex === questions.length - 1) {
+                nextBtn.innerHTML = '<span class="material-symbols-outlined text-[16px]">check</span> Finish';
+            } else {
+                nextBtn.innerHTML = 'Next <span class="material-symbols-outlined text-[16px]">arrow_forward</span>';
+            }
+
+            renderGrid();
+        }
+
+        function renderGrid() {
+            document.getElementById('question-grid').innerHTML = questions.map((_, i) => {
+                const isAnswered = answers[i].selectedAnswer !== null;
+                const isCurrent = i === currentIndex;
+                let cls = 'size-8 rounded-lg text-[11px] font-bold flex items-center justify-center cursor-pointer transition-all';
+                if (isCurrent) cls += ' bg-primary text-white shadow-lg shadow-primary/20';
+                else if (isAnswered) cls += ' bg-emerald-500 text-white';
+                else cls += ' bg-slate-100 text-slate-400 hover:bg-slate-200';
+                return `<button class="${cls}" onclick="window.__goToQuestion(${i})">${i + 1}</button>`;
+            }).join('');
+        }
+
+        window.__goToQuestion = (idx) => {
+            currentIndex = idx;
+            renderQuestion();
+        };
+
+        document.getElementById('prev-btn').addEventListener('click', () => {
+            if (currentIndex > 0) { currentIndex--; renderQuestion(); }
+        });
+
+        document.getElementById('next-btn').addEventListener('click', () => {
+            if (currentIndex < questions.length - 1) { currentIndex++; renderQuestion(); }
+            else {
+                // Last question - prompt submit
+                const unanswered = answers.filter(a => !a.selectedAnswer).length;
+                let msg = 'Are you sure you want to submit your test?';
+                if (unanswered > 0) msg += ` You have ${unanswered} unanswered question${unanswered > 1 ? 's' : ''}.`;
+                showModal('Submit Test', msg, () => doSubmit(false), 'Submit', 'bg-primary hover:bg-indigo-600');
+            }
+        });
+
+        document.getElementById('submit-btn').addEventListener('click', () => {
+            const unanswered = answers.filter(a => !a.selectedAnswer).length;
+            let msg = 'Are you sure you want to submit your test?';
+            if (unanswered > 0) msg += ` You have ${unanswered} unanswered question${unanswered > 1 ? 's' : ''}.`;
+            showModal('Submit Test', msg, () => doSubmit(false), 'Submit', 'bg-primary hover:bg-indigo-600');
+        });
+
+        async function doSubmit(timedOut) {
+            timer.stop();
+            document.getElementById('submit-btn').disabled = true;
+            document.getElementById('submit-btn').innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">progress_activity</span> Submitting...';
+
+            try {
+                await submitAttempt(attemptId, answers, timedOut ? 0 : timer.remainingSeconds, timer.totalSeconds);
+                clearQuizState(attemptId);
+                if (timedOut) {
+                    showToast('Time is up! Your test has been submitted.', 'warning');
+                }
+                setTimeout(() => {
+                    navigateTo(`/results.html?attemptId=${attemptId}`);
+                }, timedOut ? 1500 : 300);
+            } catch (e) {
+                console.error('Submit error:', e);
+                showToast('Failed to submit. Retrying...', 'error');
+                // Retry once
+                try {
+                    await submitAttempt(attemptId, answers, timedOut ? 0 : timer.remainingSeconds, timer.totalSeconds);
+                    clearQuizState(attemptId);
+                    navigateTo(`/results.html?attemptId=${attemptId}`);
+                } catch (e2) {
+                    showToast('Submit failed. Your answers are saved locally.', 'error');
+                    saveQuizState(attemptId, answers, timer.remainingSeconds, questions.map(q => q.id));
+                }
+            }
+        }
+
+        // Warn before leaving
+        window.addEventListener('beforeunload', (e) => {
+            if (timer && timer.remainingSeconds > 0) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
+    </script>
+</body>
+</html>

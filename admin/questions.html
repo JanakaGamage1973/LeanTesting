@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LeanTest - Question Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: { extend: { colors: { primary: '#6366f1', 'primary-dark': '#4f46e5' } } }
+        }
+    </script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,-25" />
+    <link rel="stylesheet" href="../css/styles.css" />
+</head>
+<body class="bg-slate-50 min-h-screen flex">
+    <aside id="sidebar" class="w-52 bg-white border-r border-slate-100 fixed h-screen overflow-y-auto"></aside>
+    <div class="flex-1 ml-52">
+        <header id="header" class="h-16 sticky top-0 bg-white/80 backdrop-blur-md border-b border-slate-100 z-40"></header>
+        <main class="p-6 page-enter">
+            <div class="flex items-center justify-between mb-6">
+                <h1 class="text-lg font-bold text-slate-800">Questions</h1>
+                <div class="flex items-center gap-3">
+                    <button id="add-single-btn" class="border border-slate-200 text-slate-500 px-4 py-2 rounded-xl text-[11px] font-medium hover:bg-slate-50 transition-colors flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[16px]">add</span>
+                        Add Question
+                    </button>
+                    <button id="upload-btn" class="bg-primary text-white px-4 py-2 rounded-xl text-[11px] font-bold hover:bg-indigo-600 shadow-lg shadow-primary/20 transition-all flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[16px]">upload_file</span>
+                        Upload CSV/JSON
+                    </button>
+                </div>
+            </div>
+
+            <!-- Upload Section -->
+            <div id="upload-section" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-6 hidden">
+                <h3 class="text-sm font-bold text-slate-800 mb-2">Upload Questions</h3>
+                <p class="text-[11px] text-slate-500 mb-4">Upload a CSV or JSON file with your questions. <a href="#" id="download-template" class="text-primary hover:underline">Download CSV template</a></p>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Target Test</label>
+                        <select id="upload-test-select" required
+                            class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                            <option value="">Select a test...</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="drop-zone" class="drop-zone rounded-2xl p-8 text-center cursor-pointer mb-4">
+                    <input type="file" id="file-input" accept=".csv,.json" class="hidden" />
+                    <span class="material-symbols-outlined text-slate-300 text-4xl mb-2">cloud_upload</span>
+                    <p class="text-[12px] font-medium text-slate-500">Drop your file here or click to browse</p>
+                    <p class="text-[10px] text-slate-400 mt-1">Supports CSV and JSON formats</p>
+                </div>
+
+                <!-- Upload Preview -->
+                <div id="upload-preview" class="hidden">
+                    <div class="flex items-center justify-between mb-3">
+                        <div>
+                            <span id="upload-count" class="text-[12px] font-bold text-slate-800"></span>
+                            <span id="upload-errors" class="text-[12px] text-red-500 ml-2"></span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button id="cancel-upload" class="border border-slate-200 text-slate-500 px-3 py-1.5 rounded-lg text-[11px] font-medium hover:bg-slate-50 transition-colors">Cancel</button>
+                            <button id="confirm-upload" class="bg-primary text-white px-4 py-1.5 rounded-lg text-[11px] font-bold hover:bg-indigo-600 transition-colors">Confirm Import</button>
+                        </div>
+                    </div>
+                    <div class="max-h-64 overflow-y-auto border border-slate-100 rounded-xl">
+                        <table class="w-full text-[11px]">
+                            <thead class="sticky top-0 bg-white">
+                                <tr class="border-b border-slate-100">
+                                    <th class="text-left p-2 text-[10px] uppercase text-slate-400 font-medium tracking-wider">#</th>
+                                    <th class="text-left p-2 text-[10px] uppercase text-slate-400 font-medium tracking-wider">Question</th>
+                                    <th class="text-left p-2 text-[10px] uppercase text-slate-400 font-medium tracking-wider">Answer</th>
+                                    <th class="text-left p-2 text-[10px] uppercase text-slate-400 font-medium tracking-wider">Difficulty</th>
+                                    <th class="text-left p-2 text-[10px] uppercase text-slate-400 font-medium tracking-wider">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="preview-table"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Single Question Form -->
+            <div id="single-form-section" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-6 hidden">
+                <h3 class="text-sm font-bold text-slate-800 mb-4" id="single-form-title">Add Question</h3>
+                <form id="single-form" class="space-y-4">
+                    <input type="hidden" id="edit-question-id" value="" />
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Test</label>
+                            <select id="single-test-select" required
+                                class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                                <option value="">Select a test...</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Difficulty</label>
+                            <select id="single-difficulty" required
+                                class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                                <option value="easy">Easy</option>
+                                <option value="medium">Medium</option>
+                                <option value="hard">Hard</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Question</label>
+                        <textarea id="single-question" rows="2" required
+                            class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-none"></textarea>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Option A</label>
+                            <input type="text" id="single-a" required class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Option B</label>
+                            <input type="text" id="single-b" required class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Option C</label>
+                            <input type="text" id="single-c" required class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Option D</label>
+                            <input type="text" id="single-d" required class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Correct Answer</label>
+                        <select id="single-correct" required class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                            <option value="A">A</option>
+                            <option value="B">B</option>
+                            <option value="C">C</option>
+                            <option value="D">D</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button type="submit" class="bg-primary text-white px-4 py-2 rounded-xl text-[11px] font-bold hover:bg-indigo-600 transition-colors">Save Question</button>
+                        <button type="button" id="cancel-single" class="border border-slate-200 text-slate-500 px-4 py-2 rounded-xl text-[11px] font-medium hover:bg-slate-50 transition-colors">Cancel</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Filter -->
+            <div class="flex items-center gap-3 mb-4">
+                <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Filter by Test:</label>
+                <select id="filter-test" class="border border-slate-200 rounded-xl px-3 py-1.5 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                    <option value="">All Tests</option>
+                </select>
+                <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider ml-4">Difficulty:</label>
+                <select id="filter-difficulty" class="border border-slate-200 rounded-xl px-3 py-1.5 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                    <option value="">All</option>
+                    <option value="easy">Easy</option>
+                    <option value="medium">Medium</option>
+                    <option value="hard">Hard</option>
+                </select>
+                <span id="question-count" class="text-[10px] text-slate-400 ml-auto"></span>
+            </div>
+
+            <!-- Questions Table -->
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div class="max-h-[600px] overflow-y-auto">
+                    <table class="w-full">
+                        <thead class="sticky top-0 bg-white z-10">
+                            <tr class="border-b border-slate-100">
+                                <th class="text-left text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4">Question</th>
+                                <th class="text-left text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4 w-24">Answer</th>
+                                <th class="text-left text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4 w-24">Difficulty</th>
+                                <th class="text-left text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4 w-32">Test</th>
+                                <th class="text-right text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4 w-20">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="questions-table"></tbody>
+                    </table>
+                </div>
+                <div id="empty-questions" class="hidden"></div>
+            </div>
+        </main>
+    </div>
+
+    <script type="module">
+        import { requireAdmin, BASE_PATH } from '../js/auth.js';
+        import { renderAdminSidebar, renderHeader, initLogout, showToast, showModal, badge, difficultyBadge, emptyState } from '../js/ui.js';
+        import { db } from '../js/firebase-config.js';
+        import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, query, where } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
+        import { parseCSV, parseJSON } from '../js/csv-parser.js';
+
+        initLogout();
+        let adminUser, tests = [], parsedQuestions = [];
+
+        try {
+            adminUser = await requireAdmin();
+            document.getElementById('sidebar').innerHTML = renderAdminSidebar('questions');
+            document.getElementById('header').innerHTML = renderHeader(adminUser, 'Admin / Questions');
+
+            // Load tests for dropdowns
+            const testsSnap = await getDocs(collection(db, 'tests'));
+            testsSnap.forEach(d => tests.push({ id: d.id, ...d.data() }));
+            populateTestDropdowns();
+
+            // Pre-select test if in URL
+            const urlTestId = new URLSearchParams(window.location.search).get('testId');
+            if (urlTestId) {
+                document.getElementById('filter-test').value = urlTestId;
+                document.getElementById('upload-test-select').value = urlTestId;
+                document.getElementById('single-test-select').value = urlTestId;
+            }
+
+            await loadQuestions();
+        } catch (e) { console.error(e); }
+
+        function populateTestDropdowns() {
+            const opts = tests.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+            ['upload-test-select', 'single-test-select', 'filter-test'].forEach(id => {
+                const el = document.getElementById(id);
+                const defaultOpt = el.querySelector('option');
+                el.innerHTML = defaultOpt.outerHTML + opts;
+            });
+        }
+
+        // Upload section toggle
+        document.getElementById('upload-btn').addEventListener('click', () => {
+            document.getElementById('upload-section').classList.toggle('hidden');
+            document.getElementById('single-form-section').classList.add('hidden');
+        });
+        document.getElementById('add-single-btn').addEventListener('click', () => {
+            document.getElementById('single-form-section').classList.toggle('hidden');
+            document.getElementById('upload-section').classList.add('hidden');
+            document.getElementById('edit-question-id').value = '';
+            document.getElementById('single-form-title').textContent = 'Add Question';
+            document.getElementById('single-form').reset();
+        });
+        document.getElementById('cancel-single').addEventListener('click', () => {
+            document.getElementById('single-form-section').classList.add('hidden');
+        });
+
+        // File upload
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+        });
+        fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
+
+        function handleFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const text = e.target.result;
+                    const isJSON = file.name.endsWith('.json');
+                    const result = isJSON ? parseJSON(text) : parseCSV(text);
+                    parsedQuestions = result.questions;
+                    showPreview(result);
+                } catch (err) {
+                    showToast('Failed to parse file: ' + err.message, 'error');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function showPreview(result) {
+            document.getElementById('upload-preview').classList.remove('hidden');
+            document.getElementById('upload-count').textContent = `${result.questions.length} valid questions`;
+            document.getElementById('upload-errors').textContent = result.errors.length > 0
+                ? `${result.errors.length} errors`
+                : '';
+
+            document.getElementById('preview-table').innerHTML = [
+                ...result.questions.map((q, i) => `
+                    <tr class="border-b border-slate-50">
+                        <td class="p-2 text-slate-400">${i + 1}</td>
+                        <td class="p-2 text-slate-700 max-w-xs truncate">${q.question}</td>
+                        <td class="p-2 font-bold text-slate-700">${q.correctAnswer}</td>
+                        <td class="p-2">${difficultyBadge(q.difficulty)}</td>
+                        <td class="p-2">${badge('OK', 'emerald')}</td>
+                    </tr>`),
+                ...result.errors.map(err => `
+                    <tr class="border-b border-slate-50 bg-red-50/50">
+                        <td class="p-2 text-slate-400">${err.row}</td>
+                        <td class="p-2 text-red-600" colspan="3">${err.message}</td>
+                        <td class="p-2">${badge('Error', 'red')}</td>
+                    </tr>`)
+            ].join('');
+        }
+
+        document.getElementById('cancel-upload').addEventListener('click', () => {
+            document.getElementById('upload-preview').classList.add('hidden');
+            parsedQuestions = [];
+            fileInput.value = '';
+        });
+
+        document.getElementById('confirm-upload').addEventListener('click', async () => {
+            const testId = document.getElementById('upload-test-select').value;
+            if (!testId) { showToast('Please select a target test', 'warning'); return; }
+            if (parsedQuestions.length === 0) { showToast('No valid questions to import', 'warning'); return; }
+
+            const btn = document.getElementById('confirm-upload');
+            btn.disabled = true;
+            btn.textContent = 'Importing...';
+
+            try {
+                const chunks = [];
+                for (let i = 0; i < parsedQuestions.length; i += 450) {
+                    chunks.push(parsedQuestions.slice(i, i + 450));
+                }
+                for (const chunk of chunks) {
+                    const batch = writeBatch(db);
+                    for (const q of chunk) {
+                        const ref = doc(collection(db, 'questions'));
+                        batch.set(ref, {
+                            ...q, testId,
+                            createdBy: adminUser.uid,
+                            createdAt: serverTimestamp(),
+                            isActive: true
+                        });
+                    }
+                    await batch.commit();
+                }
+                showToast(`${parsedQuestions.length} questions imported`, 'success');
+                document.getElementById('upload-section').classList.add('hidden');
+                document.getElementById('upload-preview').classList.add('hidden');
+                parsedQuestions = [];
+                fileInput.value = '';
+                document.getElementById('filter-test').value = testId;
+                await loadQuestions();
+            } catch (err) {
+                showToast('Import failed: ' + err.message, 'error');
+                console.error(err);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Confirm Import';
+            }
+        });
+
+        // Single question form
+        document.getElementById('single-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            try {
+                const editId = document.getElementById('edit-question-id').value;
+                const data = {
+                    testId: document.getElementById('single-test-select').value,
+                    question: document.getElementById('single-question').value.trim(),
+                    optionA: document.getElementById('single-a').value.trim(),
+                    optionB: document.getElementById('single-b').value.trim(),
+                    optionC: document.getElementById('single-c').value.trim(),
+                    optionD: document.getElementById('single-d').value.trim(),
+                    correctAnswer: document.getElementById('single-correct').value,
+                    difficulty: document.getElementById('single-difficulty').value,
+                    isActive: true
+                };
+
+                if (editId) {
+                    await updateDoc(doc(db, 'questions', editId), data);
+                    showToast('Question updated', 'success');
+                } else {
+                    const ref = doc(collection(db, 'questions'));
+                    await setDoc(ref, { ...data, createdBy: adminUser.uid, createdAt: serverTimestamp() });
+                    showToast('Question added', 'success');
+                }
+                document.getElementById('single-form-section').classList.add('hidden');
+                document.getElementById('single-form').reset();
+                await loadQuestions();
+            } catch (err) {
+                showToast('Failed to save question', 'error');
+            }
+        });
+
+        // Filters
+        document.getElementById('filter-test').addEventListener('change', loadQuestions);
+        document.getElementById('filter-difficulty').addEventListener('change', loadQuestions);
+
+        async function loadQuestions() {
+            const filterTest = document.getElementById('filter-test').value;
+            const filterDiff = document.getElementById('filter-difficulty').value;
+
+            const snap = await getDocs(collection(db, 'questions'));
+            const tbody = document.getElementById('questions-table');
+            const emptyEl = document.getElementById('empty-questions');
+
+            let questions = [];
+            snap.forEach(d => {
+                const data = d.data();
+                if (!data.isActive) return;
+                if (filterTest && data.testId !== filterTest) return;
+                if (filterDiff && data.difficulty !== filterDiff) return;
+                questions.push({ id: d.id, ...data });
+            });
+
+            document.getElementById('question-count').textContent = `${questions.length} questions`;
+
+            if (questions.length === 0) {
+                tbody.innerHTML = '';
+                emptyEl.classList.remove('hidden');
+                emptyEl.innerHTML = emptyState('help_outline', 'No questions found', 'Upload a CSV or add questions manually');
+                return;
+            }
+            emptyEl.classList.add('hidden');
+
+            const testMap = {};
+            tests.forEach(t => { testMap[t.id] = t.name; });
+
+            tbody.innerHTML = questions.map(q => `
+                <tr class="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                    <td class="p-4 text-[12px] text-slate-700">${q.question.length > 80 ? q.question.substring(0, 80) + '...' : q.question}</td>
+                    <td class="p-4 text-[12px] font-bold text-slate-700">${q.correctAnswer}</td>
+                    <td class="p-4">${difficultyBadge(q.difficulty)}</td>
+                    <td class="p-4 text-[11px] text-slate-500">${testMap[q.testId] || 'Unknown'}</td>
+                    <td class="p-4 text-right">
+                        <button onclick="window.__editQ('${q.id}')" class="size-7 rounded-full hover:bg-slate-100 inline-flex items-center justify-center transition-colors" title="Edit">
+                            <span class="material-symbols-outlined text-slate-400 text-[14px]">edit</span>
+                        </button>
+                        <button onclick="window.__deleteQ('${q.id}')" class="size-7 rounded-full hover:bg-red-50 inline-flex items-center justify-center transition-colors" title="Delete">
+                            <span class="material-symbols-outlined text-slate-400 hover:text-red-500 text-[14px]">delete</span>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        window.__editQ = async (qId) => {
+            const { getDoc: gd, doc: d } = await import('https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js');
+            const snap = await gd(d(db, 'questions', qId));
+            if (!snap.exists()) return;
+            const q = snap.data();
+            document.getElementById('edit-question-id').value = qId;
+            document.getElementById('single-form-title').textContent = 'Edit Question';
+            document.getElementById('single-test-select').value = q.testId;
+            document.getElementById('single-difficulty').value = q.difficulty;
+            document.getElementById('single-question').value = q.question;
+            document.getElementById('single-a').value = q.optionA;
+            document.getElementById('single-b').value = q.optionB;
+            document.getElementById('single-c').value = q.optionC;
+            document.getElementById('single-d').value = q.optionD;
+            document.getElementById('single-correct').value = q.correctAnswer;
+            document.getElementById('single-form-section').classList.remove('hidden');
+            document.getElementById('upload-section').classList.add('hidden');
+            document.getElementById('single-form-section').scrollIntoView({ behavior: 'smooth' });
+        };
+
+        window.__deleteQ = (qId) => {
+            showModal('Delete Question', 'Are you sure? This cannot be undone.', async () => {
+                try {
+                    await updateDoc(doc(db, 'questions', qId), { isActive: false });
+                    showToast('Question deleted', 'success');
+                    await loadQuestions();
+                } catch (e) {
+                    showToast('Failed to delete', 'error');
+                }
+            }, 'Delete', 'bg-red-500 hover:bg-red-600');
+        };
+
+        // CSV template download
+        document.getElementById('download-template').addEventListener('click', (e) => {
+            e.preventDefault();
+            const csv = `question,option_a,option_b,option_c,option_d,correct_answer,difficulty\n"What is 5S?","Sort, Set, Shine, Standardize, Sustain","5 Safety rules","5 Steps of Kaizen","5 Supply chain stages","A","easy"\n"Which lean tool focuses on visual management?","Kaizen","Kanban","Poka-Yoke","Value Stream Mapping","B","medium"`;
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'questions_template.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+    </script>
+</body>
+</html>

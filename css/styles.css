@@ -1,0 +1,98 @@
+/* Custom styles for LeanTesting */
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+
+/* Page transition */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.page-enter { animation: fadeIn 0.3s ease-out; }
+
+/* Status bar on cards */
+.status-bar {
+    width: 3px;
+    height: 100%;
+    position: absolute;
+    left: 0;
+    top: 0;
+    border-radius: 3px;
+}
+
+/* Timer warning pulse */
+@keyframes pulse-warning {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+.timer-warning { animation: pulse-warning 1s ease-in-out infinite; }
+
+/* Radio button custom style */
+.quiz-option input[type="radio"] { display: none; }
+.quiz-option label {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 12px;
+    color: #475569;
+}
+.quiz-option label:hover {
+    border-color: #6366f1;
+    background: #f8f7ff;
+}
+.quiz-option input[type="radio"]:checked + label {
+    border-color: #6366f1;
+    background: #eef2ff;
+    color: #4338ca;
+    font-weight: 600;
+}
+.quiz-option .option-letter {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: #f1f5f9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 11px;
+    color: #94a3b8;
+    flex-shrink: 0;
+    transition: all 0.2s;
+}
+.quiz-option input[type="radio"]:checked + label .option-letter {
+    background: #6366f1;
+    color: white;
+}
+
+/* Drag and drop zone */
+.drop-zone {
+    border: 2px dashed #e2e8f0;
+    transition: all 0.3s;
+}
+.drop-zone.drag-over {
+    border-color: #6366f1;
+    background: #eef2ff;
+}
+
+/* Progress bar */
+.progress-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: #f1f5f9;
+    overflow: hidden;
+}
+.progress-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.5s ease;
+}
