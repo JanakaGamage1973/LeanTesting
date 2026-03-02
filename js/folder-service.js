@@ -36,19 +36,10 @@ export function buildFolderTree(folders) {
 
 // ── Descendant Queries ───────────────────────────────────────────────
 
+// Uses loadAllFolders + local filtering to avoid composite index requirements
 export async function getDescendantFolderIds(rootFolderId) {
-    const rootDoc = await getDoc(doc(db, 'folders', rootFolderId));
-    if (!rootDoc.exists()) return [rootFolderId];
-    const rootPath = rootDoc.data().path;
-
-    const snap = await getDocs(query(
-        collection(db, 'folders'),
-        where('path', '>=', rootPath),
-        where('path', '<', rootPath + '\uf8ff'),
-        where('isActive', '==', true)
-    ));
-
-    return snap.docs.map(d => d.id);
+    const allFolders = await loadAllFolders();
+    return getDescendantFolderIdsLocal(rootFolderId, allFolders);
 }
 
 // Get descendant IDs from already-loaded folders (no extra Firestore reads)
@@ -69,6 +60,9 @@ export async function createFolder(name, parentId, adminUid) {
 
     let path, depth, order;
 
+    // Load all folders once to avoid composite index queries
+    const allFolders = await loadAllFolders();
+
     if (parentId) {
         const parentDoc = await getDoc(doc(db, 'folders', parentId));
         if (!parentDoc.exists()) throw new Error('Parent folder not found');
@@ -76,22 +70,13 @@ export async function createFolder(name, parentId, adminUid) {
         path = parent.path + '/' + folderId;
         depth = (parent.depth || 0) + 1;
 
-        // Count existing siblings for order
-        const siblingsSnap = await getDocs(query(
-            collection(db, 'folders'),
-            where('parentId', '==', parentId),
-            where('isActive', '==', true)
-        ));
-        order = siblingsSnap.size;
+        // Count existing siblings locally
+        order = allFolders.filter(f => f.parentId === parentId).length;
     } else {
         path = '/' + folderId;
         depth = 0;
-        const rootsSnap = await getDocs(query(
-            collection(db, 'folders'),
-            where('parentId', '==', null),
-            where('isActive', '==', true)
-        ));
-        order = rootsSnap.size;
+        // Count existing root folders locally
+        order = allFolders.filter(f => !f.parentId).length;
     }
 
     await setDoc(folderRef, {
@@ -115,40 +100,32 @@ export async function renameFolder(folderId, newName) {
 
 export async function deleteFolder(folderId) {
     // Soft-delete folder and all descendants + their questions
-    const folderDoc = await getDoc(doc(db, 'folders', folderId));
-    if (!folderDoc.exists()) return;
-    const folderData = folderDoc.data();
-    const folderPath = folderData.path;
+    // Uses single-field queries to avoid composite index requirements
 
-    // Find all descendant folders
-    const descendantsSnap = await getDocs(query(
-        collection(db, 'folders'),
-        where('path', '>=', folderPath),
-        where('path', '<', folderPath + '\uf8ff'),
-        where('isActive', '==', true)
-    ));
+    // Get descendant folder IDs using local filtering
+    const allFolders = await loadAllFolders();
+    const descendantIds = getDescendantFolderIdsLocal(folderId, allFolders);
 
-    const folderIds = descendantsSnap.docs.map(d => d.id);
-
-    // Batch deactivate folders
-    const folderChunks = chunkArray(descendantsSnap.docs, 450);
-    for (const chunk of folderChunks) {
+    // Batch deactivate folders by ID (single doc reads, no compound query)
+    const folderIdChunks = chunkArray(descendantIds, 450);
+    for (const chunk of folderIdChunks) {
         const batch = writeBatch(db);
-        for (const d of chunk) {
-            batch.update(d.ref, { isActive: false });
+        for (const id of chunk) {
+            batch.update(doc(db, 'folders', id), { isActive: false });
         }
         await batch.commit();
     }
 
-    // Deactivate questions in these folders (batch by 30 for 'in' queries)
-    const idChunks = chunkArray(folderIds, 30);
+    // Deactivate questions in these folders
+    // Query only by folderId (single-field), filter isActive client-side
+    const idChunks = chunkArray(descendantIds, 30);
     for (const idChunk of idChunks) {
         const questionsSnap = await getDocs(query(
             collection(db, 'questions'),
-            where('folderId', 'in', idChunk),
-            where('isActive', '==', true)
+            where('folderId', 'in', idChunk)
         ));
-        const qChunks = chunkArray(questionsSnap.docs, 450);
+        const activeDocs = questionsSnap.docs.filter(d => d.data().isActive);
+        const qChunks = chunkArray(activeDocs, 450);
         for (const qChunk of qChunks) {
             const batch = writeBatch(db);
             for (const d of qChunk) {
