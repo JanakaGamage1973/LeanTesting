@@ -1,6 +1,6 @@
 import { collection, query, where, getDocs, getDoc, doc, setDoc, updateDoc, serverTimestamp, Timestamp } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
 import { db } from './firebase-config.js';
-import { getDescendantFolderIds, chunkArray } from './folder-service.js';
+import { loadAllFolders, getDescendantFolderIdsLocal, chunkArray } from './folder-service.js';
 
 export async function selectQuestions(testId, testConfig) {
     const questionsRef = collection(db, 'questions');
@@ -12,16 +12,28 @@ export async function selectQuestions(testId, testConfig) {
     return selectQuestionsLegacy(questionsRef, testId, testConfig);
 }
 
-// New: folder-based question selection
+// New: folder-based question selection (uses single-field queries to avoid composite indexes)
 async function selectQuestionsFromFolder(questionsRef, testConfig) {
-    const folderIds = await getDescendantFolderIds(testConfig.folderId);
+    // Load all folders locally and compute descendant IDs (avoids composite index on folders)
+    const allFolders = await loadAllFolders();
+    const folderIds = getDescendantFolderIdsLocal(testConfig.folderId, allFolders);
     const folderChunks = chunkArray(folderIds, 30);
 
-    const [easyDocs, mediumDocs, hardDocs] = await Promise.all([
-        queryByDifficultyAcrossFolders(questionsRef, folderChunks, 'easy'),
-        queryByDifficultyAcrossFolders(questionsRef, folderChunks, 'medium'),
-        queryByDifficultyAcrossFolders(questionsRef, folderChunks, 'hard')
-    ]);
+    // Query only by folderId (single-field index), filter isActive & difficulty client-side
+    const allDocs = [];
+    const promises = folderChunks.map(chunk =>
+        getDocs(query(questionsRef, where('folderId', 'in', chunk)))
+    );
+    const snapshots = await Promise.all(promises);
+    for (const snap of snapshots) {
+        for (const d of snap.docs) {
+            if (d.data().isActive) allDocs.push(d);
+        }
+    }
+
+    const easyDocs = allDocs.filter(d => d.data().difficulty === 'easy');
+    const mediumDocs = allDocs.filter(d => d.data().difficulty === 'medium');
+    const hardDocs = allDocs.filter(d => d.data().difficulty === 'hard');
 
     const selected = [
         ...shuffleArray(easyDocs).slice(0, testConfig.easyCount || 12),
@@ -32,39 +44,21 @@ async function selectQuestionsFromFolder(questionsRef, testConfig) {
     return shuffleArray(selected);
 }
 
-async function queryByDifficultyAcrossFolders(questionsRef, folderChunks, difficulty) {
-    const promises = folderChunks.map(chunk =>
-        getDocs(query(
-            questionsRef,
-            where('folderId', 'in', chunk),
-            where('difficulty', '==', difficulty),
-            where('isActive', '==', true)
-        ))
-    );
-    const snapshots = await Promise.all(promises);
-    const allDocs = [];
-    for (const snap of snapshots) {
-        allDocs.push(...snap.docs);
-    }
-    return allDocs;
-}
-
 // Legacy: testId-based question selection (backward compatibility)
+// Uses single-field query to avoid composite index requirements
 async function selectQuestionsLegacy(questionsRef, testId, testConfig) {
-    const [easySnap, mediumSnap, hardSnap] = await Promise.all([
-        getDocs(query(questionsRef, where('testId', '==', testId), where('difficulty', '==', 'easy'), where('isActive', '==', true))),
-        getDocs(query(questionsRef, where('testId', '==', testId), where('difficulty', '==', 'medium'), where('isActive', '==', true))),
-        getDocs(query(questionsRef, where('testId', '==', testId), where('difficulty', '==', 'hard'), where('isActive', '==', true)))
-    ]);
+    const snap = await getDocs(query(questionsRef, where('testId', '==', testId)));
 
-    const easyDocs = shuffleArray(easySnap.docs).slice(0, testConfig.easyCount || 12);
-    const mediumDocs = shuffleArray(mediumSnap.docs).slice(0, testConfig.mediumCount || 9);
-    const hardDocs = shuffleArray(hardSnap.docs).slice(0, testConfig.hardCount || 9);
+    const allDocs = snap.docs.filter(d => d.data().isActive);
+    const easyDocs = allDocs.filter(d => d.data().difficulty === 'easy');
+    const mediumDocs = allDocs.filter(d => d.data().difficulty === 'medium');
+    const hardDocs = allDocs.filter(d => d.data().difficulty === 'hard');
 
-    const selected = [...easyDocs, ...mediumDocs, ...hardDocs].map(d => ({
-        id: d.id,
-        ...d.data()
-    }));
+    const selected = [
+        ...shuffleArray(easyDocs).slice(0, testConfig.easyCount || 12),
+        ...shuffleArray(mediumDocs).slice(0, testConfig.mediumCount || 9),
+        ...shuffleArray(hardDocs).slice(0, testConfig.hardCount || 9)
+    ].map(d => ({ id: d.id, ...d.data() }));
 
     return shuffleArray(selected);
 }
