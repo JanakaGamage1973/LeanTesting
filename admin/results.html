@@ -23,10 +23,20 @@
         <main class="p-6 page-enter">
             <div class="flex items-center justify-between mb-6">
                 <h1 class="text-lg font-bold text-slate-800">Results</h1>
-                <button id="export-btn" class="border border-slate-200 text-slate-500 px-4 py-2 rounded-xl text-[11px] font-medium hover:bg-slate-50 transition-colors flex items-center gap-2">
-                    <span class="material-symbols-outlined text-[16px]">download</span>
-                    Export CSV
-                </button>
+                <div class="flex items-center gap-2">
+                    <button id="clear-orphaned-btn" class="border border-amber-200 text-amber-600 px-4 py-2 rounded-xl text-[11px] font-medium hover:bg-amber-50 transition-colors flex items-center gap-2 hidden">
+                        <span class="material-symbols-outlined text-[16px]">cleaning_services</span>
+                        <span>Clear Orphaned (<span id="orphaned-count">0</span>)</span>
+                    </button>
+                    <button id="clear-filtered-btn" class="border border-red-200 text-red-500 px-4 py-2 rounded-xl text-[11px] font-medium hover:bg-red-50 transition-colors flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[16px]">delete_sweep</span>
+                        Clear Filtered
+                    </button>
+                    <button id="export-btn" class="border border-slate-200 text-slate-500 px-4 py-2 rounded-xl text-[11px] font-medium hover:bg-slate-50 transition-colors flex items-center gap-2">
+                        <span class="material-symbols-outlined text-[16px]">download</span>
+                        Export CSV
+                    </button>
+                </div>
             </div>
 
             <!-- Stats -->
@@ -64,6 +74,7 @@
                                 <th class="text-left text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4">Time</th>
                                 <th class="text-left text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4">Status</th>
                                 <th class="text-left text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4">Date</th>
+                                <th class="text-left text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4 w-16"></th>
                             </tr>
                         </thead>
                         <tbody id="results-table"></tbody>
@@ -76,12 +87,12 @@
 
     <script type="module">
         import { requireAdmin, BASE_PATH } from '../js/auth.js';
-        import { renderAdminSidebar, renderHeader, initLogout, statCard, badge, emptyState } from '../js/ui.js';
+        import { renderAdminSidebar, renderHeader, initLogout, statCard, badge, emptyState, showModal, showToast } from '../js/ui.js';
         import { db } from '../js/firebase-config.js';
-        import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
+        import { collection, getDocs, doc, deleteDoc, writeBatch } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
 
         initLogout();
-        let allAttempts = [], userMap = {}, testMap = {};
+        let allAttempts = [], orphanedAttempts = [], userMap = {}, testMap = {};
 
         try {
             const user = await requireAdmin();
@@ -99,8 +110,18 @@
             testsSnap.forEach(d => { testMap[d.id] = d.data(); });
             attemptsSnap.forEach(d => {
                 const data = d.data();
-                if (data.status !== 'in_progress') allAttempts.push({ id: d.id, ...data });
+                if (data.status === 'in_progress') {
+                    orphanedAttempts.push({ id: d.id, ...data });
+                } else {
+                    allAttempts.push({ id: d.id, ...data });
+                }
             });
+
+            // Show orphaned count
+            if (orphanedAttempts.length > 0) {
+                document.getElementById('orphaned-count').textContent = orphanedAttempts.length;
+                document.getElementById('clear-orphaned-btn').classList.remove('hidden');
+            }
 
             // Populate filters
             const testOpts = Object.entries(testMap).map(([id, t]) => `<option value="${id}">${t.name}</option>`).join('');
@@ -182,9 +203,87 @@
                         <td class="p-4 text-[12px] text-slate-500">${min}m ${sec}s</td>
                         <td class="p-4">${badge(a.status === 'timed_out' ? 'Timed Out' : 'Completed', a.status === 'timed_out' ? 'amber' : 'emerald')}</td>
                         <td class="p-4 text-[11px] text-slate-500">${date}</td>
+                        <td class="p-4">
+                            <button class="delete-attempt-btn size-7 rounded-lg hover:bg-red-50 flex items-center justify-center transition-colors" data-id="${a.id}" title="Delete">
+                                <span class="material-symbols-outlined text-[14px] text-slate-400 hover:text-red-500">delete</span>
+                            </button>
+                        </td>
                     </tr>`;
             }).join('');
+
+            // Bind individual delete buttons
+            document.querySelectorAll('.delete-attempt-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const attemptId = btn.dataset.id;
+                    const attempt = allAttempts.find(a => a.id === attemptId);
+                    const userName = attempt ? (userMap[attempt.userId]?.displayName || userMap[attempt.userId]?.username || 'Unknown') : '';
+                    showModal('Delete Attempt', `Delete this attempt by ${userName}? This cannot be undone.`, async () => {
+                        try {
+                            await deleteDoc(doc(db, 'attempts', attemptId));
+                            allAttempts = allAttempts.filter(a => a.id !== attemptId);
+                            renderResults();
+                            renderStats();
+                            showToast('Attempt deleted', 'success');
+                        } catch (e) {
+                            console.error('Delete error:', e);
+                            showToast('Failed to delete: ' + e.message, 'error');
+                        }
+                    }, 'Delete', 'bg-red-500 hover:bg-red-600');
+                });
+            });
         }
+
+        // Clear orphaned (in_progress) attempts
+        document.getElementById('clear-orphaned-btn').addEventListener('click', () => {
+            showModal('Clear Orphaned Attempts',
+                `Delete ${orphanedAttempts.length} orphaned in-progress attempt(s)? These are incomplete attempts that were never submitted.`,
+                async () => {
+                    try {
+                        // Batch delete in chunks of 450
+                        for (let i = 0; i < orphanedAttempts.length; i += 450) {
+                            const batch = writeBatch(db);
+                            const chunk = orphanedAttempts.slice(i, i + 450);
+                            chunk.forEach(a => batch.delete(doc(db, 'attempts', a.id)));
+                            await batch.commit();
+                        }
+                        showToast(`Deleted ${orphanedAttempts.length} orphaned attempts`, 'success');
+                        orphanedAttempts = [];
+                        document.getElementById('clear-orphaned-btn').classList.add('hidden');
+                    } catch (e) {
+                        console.error('Clear orphaned error:', e);
+                        showToast('Failed: ' + e.message, 'error');
+                    }
+                }, 'Delete All', 'bg-red-500 hover:bg-red-600');
+        });
+
+        // Clear filtered results
+        document.getElementById('clear-filtered-btn').addEventListener('click', () => {
+            const filtered = getFiltered();
+            if (filtered.length === 0) {
+                showToast('No results to delete', 'warning');
+                return;
+            }
+            showModal('Clear Results',
+                `Delete ${filtered.length} attempt(s) currently shown? This cannot be undone.`,
+                async () => {
+                    try {
+                        const ids = new Set(filtered.map(a => a.id));
+                        for (let i = 0; i < filtered.length; i += 450) {
+                            const batch = writeBatch(db);
+                            const chunk = filtered.slice(i, i + 450);
+                            chunk.forEach(a => batch.delete(doc(db, 'attempts', a.id)));
+                            await batch.commit();
+                        }
+                        allAttempts = allAttempts.filter(a => !ids.has(a.id));
+                        renderResults();
+                        renderStats();
+                        showToast(`Deleted ${filtered.length} attempts`, 'success');
+                    } catch (e) {
+                        console.error('Clear filtered error:', e);
+                        showToast('Failed: ' + e.message, 'error');
+                    }
+                }, 'Delete All', 'bg-red-500 hover:bg-red-600');
+        });
 
         // Export CSV
         document.getElementById('export-btn').addEventListener('click', () => {
