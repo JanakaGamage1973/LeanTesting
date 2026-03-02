@@ -44,6 +44,13 @@
                             placeholder="Brief description of this test"></textarea>
                     </div>
                     <div>
+                        <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Share Code</label>
+                        <input type="text" id="test-code" required pattern="[a-zA-Z0-9_-]+" title="Letters, numbers, hyphens and underscores only"
+                            class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                            placeholder="e.g., LEAN001, 5S-2026" />
+                        <p class="text-[10px] text-slate-400 mt-1">Unique code used in the shareable link</p>
+                    </div>
+                    <div>
                         <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Duration (minutes)</label>
                         <input type="number" id="test-duration" value="30" min="5" max="120"
                             class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
@@ -170,9 +177,11 @@
 
             try {
                 const editId = document.getElementById('edit-test-id').value;
+                const shareCode = document.getElementById('test-code').value.trim();
                 const data = {
                     name: document.getElementById('test-name').value.trim(),
                     description: document.getElementById('test-desc').value.trim(),
+                    shareCode,
                     duration: parseInt(document.getElementById('test-duration').value),
                     totalQuestions: parseInt(document.getElementById('test-total').value),
                     easyCount: parseInt(document.getElementById('test-easy').value),
@@ -291,7 +300,18 @@
                                 <div class="text-sm font-bold ${avgPct >= 70 ? 'text-emerald-600' : avgPct >= 50 ? 'text-amber-600' : 'text-red-600'}">${ac.count > 0 ? avgPct + '%' : '-'}</div>
                             </div>
                         </div>
-                        <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                        ${test.shareCode ? `
+                        <div class="mt-4 pt-3 border-t border-slate-100">
+                            <div class="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2">
+                                <span class="material-symbols-outlined text-[14px] text-slate-400">link</span>
+                                <input type="text" readonly value="${window.location.origin}${BASE_PATH}/t.html?code=${test.shareCode}" class="flex-1 bg-transparent text-[11px] text-slate-600 outline-none truncate" id="link-${d.id}" />
+                                <button onclick="window.__copyLink('${d.id}')" class="text-[10px] text-primary font-bold hover:underline flex items-center gap-1 whitespace-nowrap">
+                                    <span class="material-symbols-outlined text-[14px]">content_copy</span> Copy Link
+                                </button>
+                            </div>
+                        </div>
+                        ` : ''}
+                        <div class="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
                             <span class="text-[10px] text-slate-400">Created ${date}</span>
                             <a href="${BASE_PATH}/admin/questions.html?testId=${d.id}" class="text-[11px] text-primary font-medium hover:underline flex items-center gap-1">
                                 Manage Questions <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
@@ -316,9 +336,23 @@
             document.getElementById('test-easy').value = test.easyCount;
             document.getElementById('test-medium').value = test.mediumCount;
             document.getElementById('test-hard').value = test.hardCount;
+            document.getElementById('test-code').value = test.shareCode || '';
             document.getElementById('test-status').value = test.isActive ? 'true' : 'false';
             document.getElementById('add-test-form').classList.remove('hidden');
             document.getElementById('add-test-form').scrollIntoView({ behavior: 'smooth' });
+        };
+
+        window.__copyLink = (testId) => {
+            const input = document.getElementById('link-' + testId);
+            if (input) {
+                navigator.clipboard.writeText(input.value).then(() => {
+                    showToast('Link copied to clipboard', 'success');
+                }).catch(() => {
+                    input.select();
+                    document.execCommand('copy');
+                    showToast('Link copied to clipboard', 'success');
+                });
+            }
         };
 
         window.__toggleTest = async (testId, newStatus) => {

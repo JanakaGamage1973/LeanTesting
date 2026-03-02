@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LeanTest</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: { extend: { colors: { primary: '#6366f1', 'primary-dark': '#4f46e5' } } }
+        }
+    </script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,-25" />
+    <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body class="bg-slate-50 min-h-screen flex items-center justify-center">
+    <!-- Loading -->
+    <div id="loading" class="text-center">
+        <span class="material-symbols-outlined text-primary text-4xl animate-spin mb-4">progress_activity</span>
+        <p class="text-sm font-medium text-slate-400">Loading test...</p>
+    </div>
+
+    <!-- Test Info + Login -->
+    <div id="test-card" class="page-enter w-full max-w-sm mx-4 hidden">
+        <div class="text-center mb-8">
+            <div class="size-16 bg-gradient-to-br from-primary to-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary/20">
+                <span class="material-symbols-outlined text-white text-[32px]">school</span>
+            </div>
+            <h1 class="text-xl font-bold text-slate-800">LeanTest</h1>
+            <p class="text-[12px] text-slate-400 mt-1">Sign in to start your test</p>
+        </div>
+
+        <!-- Test Details -->
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 mb-4">
+            <h2 id="test-title" class="text-sm font-bold text-slate-800 mb-1"></h2>
+            <p id="test-description" class="text-[11px] text-slate-400 mb-3"></p>
+            <div class="flex items-center gap-4 text-[10px] text-slate-400">
+                <span class="flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[14px]">help_outline</span>
+                    <span id="test-questions">30</span> questions
+                </span>
+                <span class="flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[14px]">timer</span>
+                    <span id="test-duration">30</span> min
+                </span>
+            </div>
+        </div>
+
+        <!-- Login Form -->
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+            <form id="login-form" class="space-y-4">
+                <div>
+                    <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Username</label>
+                    <div class="relative">
+                        <span class="material-symbols-outlined text-slate-300 text-[18px] absolute left-3 top-1/2 -translate-y-1/2">person</span>
+                        <input type="text" id="username" required autocomplete="username"
+                            class="w-full border border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-[12px] text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                            placeholder="Enter your username" />
+                    </div>
+                </div>
+                <div>
+                    <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Password</label>
+                    <div class="relative">
+                        <span class="material-symbols-outlined text-slate-300 text-[18px] absolute left-3 top-1/2 -translate-y-1/2">lock</span>
+                        <input type="password" id="password" required autocomplete="current-password"
+                            class="w-full border border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-[12px] text-slate-700 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                            placeholder="Enter your password" />
+                    </div>
+                </div>
+                <div id="error-msg" class="hidden text-[11px] text-red-500 bg-red-50 px-3 py-2 rounded-lg"></div>
+                <button type="submit" id="login-btn"
+                    class="w-full bg-primary text-white px-4 py-2.5 rounded-xl text-[12px] font-bold hover:bg-indigo-600 shadow-lg shadow-primary/20 transition-all duration-300 flex items-center justify-center gap-2">
+                    <span>Sign In & Start Test</span>
+                    <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Not Found -->
+    <div id="not-found" class="text-center hidden">
+        <span class="material-symbols-outlined text-slate-300 text-4xl mb-2">error_outline</span>
+        <p class="text-sm font-medium text-slate-400">Test not found</p>
+        <p class="text-[11px] text-slate-400 mt-1">This link may be invalid or the test has been deactivated.</p>
+    </div>
+
+    <script type="module">
+        import { login, navigateTo, BASE_PATH } from './js/auth.js';
+        import { auth, db } from './js/firebase-config.js';
+        import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-auth.js';
+        import { collection, query, where, getDocs, doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
+
+        const params = new URLSearchParams(window.location.search);
+        const shareCode = params.get('code');
+
+        if (!shareCode) {
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('not-found').classList.remove('hidden');
+        }
+
+        let testId = null;
+        let testData = null;
+
+        // Look up test by share code
+        try {
+            const testsSnap = await getDocs(query(
+                collection(db, 'tests'),
+                where('shareCode', '==', shareCode),
+                where('isActive', '==', true)
+            ));
+
+            if (testsSnap.empty) {
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('not-found').classList.remove('hidden');
+            } else {
+                const testDoc = testsSnap.docs[0];
+                testId = testDoc.id;
+                testData = testDoc.data();
+
+                document.getElementById('test-title').textContent = testData.name;
+                document.getElementById('test-description').textContent = testData.description || '';
+                document.getElementById('test-questions').textContent = testData.totalQuestions || 30;
+                document.getElementById('test-duration').textContent = testData.duration || 30;
+
+                document.getElementById('loading').classList.add('hidden');
+
+                // Check if already logged in
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        const userDoc = await getDoc(doc(db, 'users', user.uid));
+                        if (userDoc.exists()) {
+                            // Already logged in, go directly to quiz
+                            navigateTo(`/quiz.html?testId=${testId}`);
+                            return;
+                        }
+                    }
+                    // Show login form
+                    document.getElementById('test-card').classList.remove('hidden');
+                });
+            }
+        } catch (e) {
+            console.error('Error loading test:', e);
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('not-found').classList.remove('hidden');
+        }
+
+        // Login form
+        const form = document.getElementById('login-form');
+        const errorMsg = document.getElementById('error-msg');
+        const loginBtn = document.getElementById('login-btn');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorMsg.classList.add('hidden');
+            loginBtn.disabled = true;
+            loginBtn.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">progress_activity</span><span>Signing in...</span>';
+
+            try {
+                const username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
+                await login(username, password);
+                navigateTo(`/quiz.html?testId=${testId}`);
+            } catch (err) {
+                console.error('Login error:', err);
+                let msg = 'Invalid username or password';
+                if (err.code === 'auth/too-many-requests') msg = 'Too many attempts. Please try again later.';
+                errorMsg.textContent = msg;
+                errorMsg.classList.remove('hidden');
+                loginBtn.disabled = false;
+                loginBtn.innerHTML = '<span>Sign In & Start Test</span><span class="material-symbols-outlined text-[16px]">arrow_forward</span>';
+            }
+        });
+    </script>
+</body>
+</html>
