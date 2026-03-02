@@ -26,13 +26,15 @@ async function selectQuestionsFromFolder(questionsRef, testConfig) {
     );
     const snapshots = await Promise.all(promises);
     const seenQuestions = new Set();
+    let rawCount = 0, inactiveCount = 0, dupCount = 0;
     for (const snap of snapshots) {
         for (const d of snap.docs) {
+            rawCount++;
             const data = d.data();
-            if (!data.isActive) continue;
+            if (!data.isActive) { inactiveCount++; continue; }
             // Deduplicate by question text to avoid duplicate questions in the quiz
             const key = (data.question || '').trim().toLowerCase();
-            if (seenQuestions.has(key)) continue;
+            if (seenQuestions.has(key)) { dupCount++; continue; }
             seenQuestions.add(key);
             allDocs.push(d);
         }
@@ -42,13 +44,38 @@ async function selectQuestionsFromFolder(questionsRef, testConfig) {
     const mediumDocs = allDocs.filter(d => d.data().difficulty === 'medium');
     const hardDocs = allDocs.filter(d => d.data().difficulty === 'hard');
 
-    const selected = [
-        ...shuffleArray(easyDocs).slice(0, testConfig.easyCount || 12),
-        ...shuffleArray(mediumDocs).slice(0, testConfig.mediumCount || 9),
-        ...shuffleArray(hardDocs).slice(0, testConfig.hardCount || 9)
-    ].map(d => ({ id: d.id, ...d.data() }));
+    // Log diagnostics to help debug question count issues
+    console.log('[QuizEngine] Selection stats:', {
+        folders: folderIds.length,
+        rawFromDB: rawCount, inactive: inactiveCount, duplicates: dupCount,
+        uniqueActive: allDocs.length,
+        easy: easyDocs.length, medium: mediumDocs.length, hard: hardDocs.length,
+        unmatched: allDocs.length - easyDocs.length - mediumDocs.length - hardDocs.length,
+        config: { easy: testConfig.easyCount, medium: testConfig.mediumCount, hard: testConfig.hardCount, total: testConfig.totalQuestions }
+    });
 
-    return shuffleArray(selected);
+    const easyTarget = testConfig.easyCount || 12;
+    const mediumTarget = testConfig.mediumCount || 9;
+    const hardTarget = testConfig.hardCount || 9;
+    const totalTarget = testConfig.totalQuestions || (easyTarget + mediumTarget + hardTarget);
+
+    const selectedEasy = shuffleArray(easyDocs).slice(0, easyTarget);
+    const selectedMedium = shuffleArray(mediumDocs).slice(0, mediumTarget);
+    const selectedHard = shuffleArray(hardDocs).slice(0, hardTarget);
+
+    let selected = [...selectedEasy, ...selectedMedium, ...selectedHard];
+
+    // If difficulty pools didn't have enough, fill up from remaining questions
+    if (selected.length < totalTarget && allDocs.length > selected.length) {
+        const selectedIds = new Set(selected.map(d => d.id));
+        const remaining = shuffleArray(allDocs.filter(d => !selectedIds.has(d.id)));
+        selected = [...selected, ...remaining.slice(0, totalTarget - selected.length)];
+        console.log('[QuizEngine] Filled up to', selected.length, 'of', totalTarget, 'target');
+    }
+
+    const result = selected.map(d => ({ id: d.id, ...d.data() }));
+    console.log('[QuizEngine] Final question count:', result.length);
+    return shuffleArray(result);
 }
 
 // Legacy: testId-based question selection (backward compatibility)
@@ -61,13 +88,33 @@ async function selectQuestionsLegacy(questionsRef, testId, testConfig) {
     const mediumDocs = allDocs.filter(d => d.data().difficulty === 'medium');
     const hardDocs = allDocs.filter(d => d.data().difficulty === 'hard');
 
-    const selected = [
-        ...shuffleArray(easyDocs).slice(0, testConfig.easyCount || 12),
-        ...shuffleArray(mediumDocs).slice(0, testConfig.mediumCount || 9),
-        ...shuffleArray(hardDocs).slice(0, testConfig.hardCount || 9)
-    ].map(d => ({ id: d.id, ...d.data() }));
+    console.log('[QuizEngine Legacy] Selection stats:', {
+        total: allDocs.length, easy: easyDocs.length, medium: mediumDocs.length, hard: hardDocs.length,
+        config: { easy: testConfig.easyCount, medium: testConfig.mediumCount, hard: testConfig.hardCount, total: testConfig.totalQuestions }
+    });
 
-    return shuffleArray(selected);
+    const easyTarget = testConfig.easyCount || 12;
+    const mediumTarget = testConfig.mediumCount || 9;
+    const hardTarget = testConfig.hardCount || 9;
+    const totalTarget = testConfig.totalQuestions || (easyTarget + mediumTarget + hardTarget);
+
+    const selectedEasy = shuffleArray(easyDocs).slice(0, easyTarget);
+    const selectedMedium = shuffleArray(mediumDocs).slice(0, mediumTarget);
+    const selectedHard = shuffleArray(hardDocs).slice(0, hardTarget);
+
+    let selected = [...selectedEasy, ...selectedMedium, ...selectedHard];
+
+    // If difficulty pools didn't have enough, fill up from remaining questions
+    if (selected.length < totalTarget && allDocs.length > selected.length) {
+        const selectedIds = new Set(selected.map(d => d.id));
+        const remaining = shuffleArray(allDocs.filter(d => !selectedIds.has(d.id)));
+        selected = [...selected, ...remaining.slice(0, totalTarget - selected.length)];
+        console.log('[QuizEngine Legacy] Filled up to', selected.length, 'of', totalTarget, 'target');
+    }
+
+    const result = selected.map(d => ({ id: d.id, ...d.data() }));
+    console.log('[QuizEngine Legacy] Final question count:', result.length);
+    return shuffleArray(result);
 }
 
 export function shuffleArray(array) {
