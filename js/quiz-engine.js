@@ -1,6 +1,6 @@
 import { collection, query, where, getDocs, getDoc, doc, setDoc, updateDoc, serverTimestamp, Timestamp } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
-import { db } from './firebase-config.js';
-import { loadAllFolders, getDescendantFolderIdsLocal, chunkArray } from './folder-service.js';
+import { db } from './firebase-config.js?v=2';
+import { loadAllFolders, getDescendantFolderIdsLocal, chunkArray } from './folder-service.js?v=2';
 
 export async function selectQuestions(testId, testConfig) {
     const questionsRef = collection(db, 'questions');
