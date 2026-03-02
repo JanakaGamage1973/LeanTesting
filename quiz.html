@@ -88,208 +88,235 @@
         </div>
     </main>
 
-    <script type="module">
-        import { requireAuth, navigateTo, BASE_PATH } from './js/auth.js?v=2';
-        import { db } from './js/firebase-config.js?v=2';
-        import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
-        import { selectQuestions, QuizTimer, createAttempt, submitAttempt, saveQuizState, loadQuizState, clearQuizState } from './js/quiz-engine.js?v=2';
-        import { showToast, showModal } from './js/ui.js?v=2';
-
-        const params = new URLSearchParams(window.location.search);
-        const testId = params.get('testId');
-
-        if (!testId) {
-            navigateTo('/dashboard.html');
-        }
-
-        let user, test, questions, answers, timer, attemptId;
-        let currentIndex = 0;
-
-        try {
-            user = await requireAuth();
-
-            // Fetch test config
-            const testDoc = await getDoc(doc(db, 'tests', testId));
-            if (!testDoc.exists()) {
-                showToast('Test not found', 'error');
-                navigateTo('/dashboard.html');
+    <script>
+        (async function() {
+            function showLoadError(msg) {
+                document.getElementById('loading').innerHTML =
+                    '<span class="material-symbols-outlined text-red-300 text-4xl mb-2">error</span>' +
+                    '<p class="text-sm font-medium text-slate-500 mb-1">Failed to load quiz</p>' +
+                    '<p class="text-[11px] text-red-400 mb-4 max-w-lg mx-auto break-words">' + msg + '</p>';
             }
-            test = testDoc.data();
-            document.getElementById('test-name').textContent = test.name;
-
-            // Select questions
-            questions = await selectQuestions(testId, test);
-            if (questions.length === 0) {
-                showToast('No questions available for this test', 'error');
-                navigateTo('/dashboard.html');
-            }
-
-            // Create attempt
-            const attempt = await createAttempt(user.uid, testId, questions);
-            attemptId = attempt.id;
-            answers = attempt.answers;
-
-            // Init timer
-            const duration = test.duration || 30;
-            timer = new QuizTimer(duration, onTimerTick, onTimerExpire);
-
-            // Show quiz
-            document.getElementById('loading').classList.add('hidden');
-            document.getElementById('quiz-content').classList.remove('hidden');
-            document.getElementById('submit-btn').classList.remove('hidden');
-
-            renderQuestion();
-            renderGrid();
-            timer.start();
-
-        } catch (e) {
-            console.error(e);
-        }
-
-        function onTimerTick(seconds) {
-            const display = document.getElementById('timer-display');
-            const container = document.getElementById('timer');
-            const m = String(Math.floor(seconds / 60)).padStart(2, '0');
-            const s = String(seconds % 60).padStart(2, '0');
-            display.textContent = `${m}:${s}`;
-
-            if (seconds <= 60) {
-                container.classList.add('bg-red-50');
-                container.classList.remove('bg-slate-50');
-                display.classList.add('text-red-600', 'timer-warning');
-                display.classList.remove('text-slate-800');
-            } else if (seconds <= 300) {
-                container.classList.add('bg-amber-50');
-                container.classList.remove('bg-slate-50');
-                display.classList.add('text-amber-600');
-                display.classList.remove('text-slate-800');
-            }
-
-            // Auto-save every 30 seconds
-            if (seconds % 30 === 0) {
-                saveQuizState(attemptId, answers, seconds, questions.map(q => q.id));
-            }
-        }
-
-        function onTimerExpire() {
-            doSubmit(true);
-        }
-
-        function renderQuestion() {
-            const q = questions[currentIndex];
-            const a = answers[currentIndex];
-
-            document.getElementById('question-counter').textContent = `Question ${currentIndex + 1} of ${questions.length}`;
-            document.getElementById('question-number').textContent = `Question ${currentIndex + 1}`;
-            document.getElementById('question-text').textContent = q.question;
-
-            const options = ['A', 'B', 'C', 'D'];
-            const optionKeys = ['optionA', 'optionB', 'optionC', 'optionD'];
-            document.getElementById('options').innerHTML = options.map((letter, i) => `
-                <div class="quiz-option">
-                    <input type="radio" name="answer" id="opt-${letter}" value="${letter}" ${a.selectedAnswer === letter ? 'checked' : ''} />
-                    <label for="opt-${letter}">
-                        <span class="option-letter">${letter}</span>
-                        <span>${q[optionKeys[i]]}</span>
-                    </label>
-                </div>
-            `).join('');
-
-            // Bind option clicks
-            document.querySelectorAll('input[name="answer"]').forEach(input => {
-                input.addEventListener('change', () => {
-                    answers[currentIndex].selectedAnswer = input.value;
-                    renderGrid();
-                });
-            });
-
-            // Navigation buttons
-            document.getElementById('prev-btn').disabled = currentIndex === 0;
-            const nextBtn = document.getElementById('next-btn');
-            if (currentIndex === questions.length - 1) {
-                nextBtn.innerHTML = '<span class="material-symbols-outlined text-[16px]">check</span> Finish';
-            } else {
-                nextBtn.innerHTML = 'Next <span class="material-symbols-outlined text-[16px]">arrow_forward</span>';
-            }
-
-            renderGrid();
-        }
-
-        function renderGrid() {
-            document.getElementById('question-grid').innerHTML = questions.map((_, i) => {
-                const isAnswered = answers[i].selectedAnswer !== null;
-                const isCurrent = i === currentIndex;
-                let cls = 'size-8 rounded-lg text-[11px] font-bold flex items-center justify-center cursor-pointer transition-all';
-                if (isCurrent) cls += ' bg-primary text-white shadow-lg shadow-primary/20';
-                else if (isAnswered) cls += ' bg-emerald-500 text-white';
-                else cls += ' bg-slate-100 text-slate-400 hover:bg-slate-200';
-                return `<button class="${cls}" onclick="window.__goToQuestion(${i})">${i + 1}</button>`;
-            }).join('');
-        }
-
-        window.__goToQuestion = (idx) => {
-            currentIndex = idx;
-            renderQuestion();
-        };
-
-        document.getElementById('prev-btn').addEventListener('click', () => {
-            if (currentIndex > 0) { currentIndex--; renderQuestion(); }
-        });
-
-        document.getElementById('next-btn').addEventListener('click', () => {
-            if (currentIndex < questions.length - 1) { currentIndex++; renderQuestion(); }
-            else {
-                // Last question - prompt submit
-                const unanswered = answers.filter(a => !a.selectedAnswer).length;
-                let msg = 'Are you sure you want to submit your test?';
-                if (unanswered > 0) msg += ` You have ${unanswered} unanswered question${unanswered > 1 ? 's' : ''}.`;
-                showModal('Submit Test', msg, () => doSubmit(false), 'Submit', 'bg-primary hover:bg-indigo-600');
-            }
-        });
-
-        document.getElementById('submit-btn').addEventListener('click', () => {
-            const unanswered = answers.filter(a => !a.selectedAnswer).length;
-            let msg = 'Are you sure you want to submit your test?';
-            if (unanswered > 0) msg += ` You have ${unanswered} unanswered question${unanswered > 1 ? 's' : ''}.`;
-            showModal('Submit Test', msg, () => doSubmit(false), 'Submit', 'bg-primary hover:bg-indigo-600');
-        });
-
-        async function doSubmit(timedOut) {
-            timer.stop();
-            document.getElementById('submit-btn').disabled = true;
-            document.getElementById('submit-btn').innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">progress_activity</span> Submitting...';
 
             try {
-                await submitAttempt(attemptId, answers, timedOut ? 0 : timer.remainingSeconds, timer.totalSeconds);
-                clearQuizState(attemptId);
-                if (timedOut) {
-                    showToast('Time is up! Your test has been submitted.', 'warning');
-                }
-                setTimeout(() => {
-                    navigateTo(`/results.html?attemptId=${attemptId}`);
-                }, timedOut ? 1500 : 300);
-            } catch (e) {
-                console.error('Submit error:', e);
-                showToast('Failed to submit. Retrying...', 'error');
-                // Retry once
-                try {
-                    await submitAttempt(attemptId, answers, timedOut ? 0 : timer.remainingSeconds, timer.totalSeconds);
-                    clearQuizState(attemptId);
-                    navigateTo(`/results.html?attemptId=${attemptId}`);
-                } catch (e2) {
-                    showToast('Submit failed. Your answers are saved locally.', 'error');
-                    saveQuizState(attemptId, answers, timer.remainingSeconds, questions.map(q => q.id));
-                }
-            }
-        }
+                var [authModule, configModule, firestoreModule, quizModule, uiModule] = await Promise.all([
+                    import('./js/auth.js'),
+                    import('./js/firebase-config.js'),
+                    import('https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js'),
+                    import('./js/quiz-engine.js'),
+                    import('./js/ui.js')
+                ]);
 
-        // Warn before leaving
-        window.addEventListener('beforeunload', (e) => {
-            if (timer && timer.remainingSeconds > 0) {
-                e.preventDefault();
-                e.returnValue = '';
+                var requireAuth = authModule.requireAuth;
+                var navigateTo = authModule.navigateTo;
+                var BASE_PATH = authModule.BASE_PATH;
+                var db = configModule.db;
+                var doc = firestoreModule.doc;
+                var getDoc = firestoreModule.getDoc;
+                var selectQuestions = quizModule.selectQuestions;
+                var QuizTimer = quizModule.QuizTimer;
+                var createAttempt = quizModule.createAttempt;
+                var submitAttempt = quizModule.submitAttempt;
+                var saveQuizState = quizModule.saveQuizState;
+                var loadQuizState = quizModule.loadQuizState;
+                var clearQuizState = quizModule.clearQuizState;
+                var showToast = uiModule.showToast;
+                var showModal = uiModule.showModal;
+
+                var params = new URLSearchParams(window.location.search);
+                var testId = params.get('testId');
+
+                if (!testId) {
+                    navigateTo('/dashboard.html');
+                    return;
+                }
+
+                var user = await requireAuth();
+
+                // Fetch test config
+                var testDoc = await getDoc(doc(db, 'tests', testId));
+                if (!testDoc.exists()) {
+                    showToast('Test not found', 'error');
+                    navigateTo('/dashboard.html');
+                    return;
+                }
+                var test = testDoc.data();
+                document.getElementById('test-name').textContent = test.name;
+
+                // Select questions
+                var questions = await selectQuestions(testId, test);
+                if (questions.length === 0) {
+                    showToast('No questions available for this test', 'error');
+                    navigateTo('/dashboard.html');
+                    return;
+                }
+
+                // Create attempt
+                var attempt = await createAttempt(user.uid, testId, questions);
+                var attemptId = attempt.id;
+                var answers = attempt.answers;
+                var currentIndex = 0;
+
+                // Init timer
+                var duration = test.duration || 30;
+                var timer = new QuizTimer(duration, onTimerTick, onTimerExpire);
+
+                // Show quiz
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('quiz-content').classList.remove('hidden');
+                document.getElementById('submit-btn').classList.remove('hidden');
+
+                renderQuestion();
+                renderGrid();
+                timer.start();
+
+                function onTimerTick(seconds) {
+                    var display = document.getElementById('timer-display');
+                    var container = document.getElementById('timer');
+                    var m = String(Math.floor(seconds / 60)).padStart(2, '0');
+                    var s = String(seconds % 60).padStart(2, '0');
+                    display.textContent = m + ':' + s;
+
+                    if (seconds <= 60) {
+                        container.classList.add('bg-red-50');
+                        container.classList.remove('bg-slate-50');
+                        display.classList.add('text-red-600', 'timer-warning');
+                        display.classList.remove('text-slate-800');
+                    } else if (seconds <= 300) {
+                        container.classList.add('bg-amber-50');
+                        container.classList.remove('bg-slate-50');
+                        display.classList.add('text-amber-600');
+                        display.classList.remove('text-slate-800');
+                    }
+
+                    // Auto-save every 30 seconds
+                    if (seconds % 30 === 0) {
+                        saveQuizState(attemptId, answers, seconds, questions.map(function(q) { return q.id; }));
+                    }
+                }
+
+                function onTimerExpire() {
+                    doSubmit(true);
+                }
+
+                function renderQuestion() {
+                    var q = questions[currentIndex];
+                    var a = answers[currentIndex];
+
+                    document.getElementById('question-counter').textContent = 'Question ' + (currentIndex + 1) + ' of ' + questions.length;
+                    document.getElementById('question-number').textContent = 'Question ' + (currentIndex + 1);
+                    document.getElementById('question-text').textContent = q.question;
+
+                    var optLetters = ['A', 'B', 'C', 'D'];
+                    var optKeys = ['optionA', 'optionB', 'optionC', 'optionD'];
+                    document.getElementById('options').innerHTML = optLetters.map(function(letter, i) {
+                        return '<div class="quiz-option">' +
+                            '<input type="radio" name="answer" id="opt-' + letter + '" value="' + letter + '" ' + (a.selectedAnswer === letter ? 'checked' : '') + ' />' +
+                            '<label for="opt-' + letter + '">' +
+                                '<span class="option-letter">' + letter + '</span>' +
+                                '<span>' + q[optKeys[i]] + '</span>' +
+                            '</label>' +
+                        '</div>';
+                    }).join('');
+
+                    // Bind option clicks
+                    document.querySelectorAll('input[name="answer"]').forEach(function(input) {
+                        input.addEventListener('change', function() {
+                            answers[currentIndex].selectedAnswer = input.value;
+                            renderGrid();
+                        });
+                    });
+
+                    // Navigation buttons
+                    document.getElementById('prev-btn').disabled = currentIndex === 0;
+                    var nextBtn = document.getElementById('next-btn');
+                    if (currentIndex === questions.length - 1) {
+                        nextBtn.innerHTML = '<span class="material-symbols-outlined text-[16px]">check</span> Finish';
+                    } else {
+                        nextBtn.innerHTML = 'Next <span class="material-symbols-outlined text-[16px]">arrow_forward</span>';
+                    }
+
+                    renderGrid();
+                }
+
+                function renderGrid() {
+                    document.getElementById('question-grid').innerHTML = questions.map(function(_, i) {
+                        var isAnswered = answers[i].selectedAnswer !== null;
+                        var isCurrent = i === currentIndex;
+                        var cls = 'size-8 rounded-lg text-[11px] font-bold flex items-center justify-center cursor-pointer transition-all';
+                        if (isCurrent) cls += ' bg-primary text-white shadow-lg shadow-primary/20';
+                        else if (isAnswered) cls += ' bg-emerald-500 text-white';
+                        else cls += ' bg-slate-100 text-slate-400 hover:bg-slate-200';
+                        return '<button class="' + cls + '" onclick="window.__goToQuestion(' + i + ')">' + (i + 1) + '</button>';
+                    }).join('');
+                }
+
+                window.__goToQuestion = function(idx) {
+                    currentIndex = idx;
+                    renderQuestion();
+                };
+
+                document.getElementById('prev-btn').addEventListener('click', function() {
+                    if (currentIndex > 0) { currentIndex--; renderQuestion(); }
+                });
+
+                document.getElementById('next-btn').addEventListener('click', function() {
+                    if (currentIndex < questions.length - 1) { currentIndex++; renderQuestion(); }
+                    else {
+                        var unanswered = answers.filter(function(a) { return !a.selectedAnswer; }).length;
+                        var msg = 'Are you sure you want to submit your test?';
+                        if (unanswered > 0) msg += ' You have ' + unanswered + ' unanswered question' + (unanswered > 1 ? 's' : '') + '.';
+                        showModal('Submit Test', msg, function() { doSubmit(false); }, 'Submit', 'bg-primary hover:bg-indigo-600');
+                    }
+                });
+
+                document.getElementById('submit-btn').addEventListener('click', function() {
+                    var unanswered = answers.filter(function(a) { return !a.selectedAnswer; }).length;
+                    var msg = 'Are you sure you want to submit your test?';
+                    if (unanswered > 0) msg += ' You have ' + unanswered + ' unanswered question' + (unanswered > 1 ? 's' : '') + '.';
+                    showModal('Submit Test', msg, function() { doSubmit(false); }, 'Submit', 'bg-primary hover:bg-indigo-600');
+                });
+
+                async function doSubmit(timedOut) {
+                    timer.stop();
+                    document.getElementById('submit-btn').disabled = true;
+                    document.getElementById('submit-btn').innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">progress_activity</span> Submitting...';
+
+                    try {
+                        await submitAttempt(attemptId, answers, timedOut ? 0 : timer.remainingSeconds, timer.totalSeconds);
+                        clearQuizState(attemptId);
+                        if (timedOut) {
+                            showToast('Time is up! Your test has been submitted.', 'warning');
+                        }
+                        setTimeout(function() {
+                            navigateTo('/results.html?attemptId=' + attemptId);
+                        }, timedOut ? 1500 : 300);
+                    } catch (e) {
+                        console.error('Submit error:', e);
+                        showToast('Failed to submit. Retrying...', 'error');
+                        try {
+                            await submitAttempt(attemptId, answers, timedOut ? 0 : timer.remainingSeconds, timer.totalSeconds);
+                            clearQuizState(attemptId);
+                            navigateTo('/results.html?attemptId=' + attemptId);
+                        } catch (e2) {
+                            showToast('Submit failed. Your answers are saved locally.', 'error');
+                            saveQuizState(attemptId, answers, timer.remainingSeconds, questions.map(function(q) { return q.id; }));
+                        }
+                    }
+                }
+
+                // Warn before leaving
+                window.addEventListener('beforeunload', function(e) {
+                    if (timer && timer.remainingSeconds > 0) {
+                        e.preventDefault();
+                        e.returnValue = '';
+                    }
+                });
+
+            } catch (e) {
+                console.error('Quiz page error:', e);
+                showLoadError(e.message || String(e));
             }
-        });
+        })();
     </script>
 </body>
 </html>
