@@ -478,9 +478,34 @@
             btn.textContent = 'Importing...';
 
             try {
+                // Check for existing questions in this folder to skip duplicates
+                const existingSnap = await getDocs(query(
+                    collection(db, 'questions'),
+                    where('folderId', '==', selectedFolderId)
+                ));
+                const existingTexts = new Set();
+                existingSnap.forEach(d => {
+                    const data = d.data();
+                    if (data.isActive) existingTexts.add((data.question || '').trim().toLowerCase());
+                });
+
+                // Filter out duplicates
+                const newQuestions = parsedQuestions.filter(q => {
+                    const key = (q.question || '').trim().toLowerCase();
+                    return !existingTexts.has(key);
+                });
+                const skippedCount = parsedQuestions.length - newQuestions.length;
+
+                if (newQuestions.length === 0) {
+                    showToast('All questions already exist in this folder', 'warning');
+                    btn.disabled = false;
+                    btn.textContent = 'Confirm Import';
+                    return;
+                }
+
                 const chunks = [];
-                for (let i = 0; i < parsedQuestions.length; i += 450) {
-                    chunks.push(parsedQuestions.slice(i, i + 450));
+                for (let i = 0; i < newQuestions.length; i += 450) {
+                    chunks.push(newQuestions.slice(i, i + 450));
                 }
                 for (const chunk of chunks) {
                     const batch = writeBatch(db);
@@ -497,9 +522,12 @@
                 }
 
                 // Update folder question count
-                await incrementQuestionCount(selectedFolderId, parsedQuestions.length);
+                await incrementQuestionCount(selectedFolderId, newQuestions.length);
 
-                showToast(`${parsedQuestions.length} questions imported`, 'success');
+                const msg = skippedCount > 0
+                    ? `${newQuestions.length} questions imported (${skippedCount} duplicates skipped)`
+                    : `${newQuestions.length} questions imported`;
+                showToast(msg, 'success');
                 document.getElementById('upload-section').classList.add('hidden');
                 document.getElementById('upload-preview').classList.add('hidden');
                 parsedQuestions = [];

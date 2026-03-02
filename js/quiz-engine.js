@@ -25,9 +25,16 @@ async function selectQuestionsFromFolder(questionsRef, testConfig) {
         getDocs(query(questionsRef, where('folderId', 'in', chunk)))
     );
     const snapshots = await Promise.all(promises);
+    const seenQuestions = new Set();
     for (const snap of snapshots) {
         for (const d of snap.docs) {
-            if (d.data().isActive) allDocs.push(d);
+            const data = d.data();
+            if (!data.isActive) continue;
+            // Deduplicate by question text to avoid duplicate questions in the quiz
+            const key = (data.question || '').trim().toLowerCase();
+            if (seenQuestions.has(key)) continue;
+            seenQuestions.add(key);
+            allDocs.push(d);
         }
     }
 
