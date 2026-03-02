@@ -90,6 +90,13 @@
 
     <script>
         (async function() {
+            // Layer 3: Guard against double execution (e.g., page reload or script re-run)
+            if (window.__quizInitialized) {
+                console.log('[Quiz] Already initialized, skipping duplicate execution');
+                return;
+            }
+            window.__quizInitialized = true;
+
             function showLoadError(msg) {
                 document.getElementById('loading').innerHTML =
                     '<span class="material-symbols-outlined text-red-300 text-4xl mb-2">error</span>' +
@@ -114,6 +121,10 @@
                 var db = configModule.db;
                 var doc = firestoreModule.doc;
                 var getDoc = firestoreModule.getDoc;
+                var collection = firestoreModule.collection;
+                var fsQuery = firestoreModule.query;
+                var where = firestoreModule.where;
+                var getDocs = firestoreModule.getDocs;
                 var selectQuestions = quizModule.selectQuestions;
                 var QuizTimer = quizModule.QuizTimer;
                 var createAttempt = quizModule.createAttempt;
@@ -144,28 +155,169 @@
                 var test = testDoc.data();
                 document.getElementById('test-name').textContent = test.name;
 
-                // Select questions
-                var questions = await selectQuestions(testId, test);
-                if (questions.length === 0) {
-                    showToast('No questions available for this test', 'error');
-                    navigateTo('/dashboard.html');
-                    return;
+                var questions, attemptId, answers;
+                var currentIndex = 0;
+                var resumedTimer = null;
+
+                // ─── Layer 1: Resume existing in-progress attempt ───
+                // If the page reloads for any reason, this picks up the existing attempt
+                // instead of creating a new one with potentially fewer questions
+                console.log('[Quiz] Checking for existing in-progress attempt...');
+                var userAttemptsSnap = await getDocs(fsQuery(
+                    collection(db, 'attempts'),
+                    where('userId', '==', user.uid)
+                ));
+
+                var existingAttempt = null;
+                userAttemptsSnap.forEach(function(d) {
+                    var data = d.data();
+                    if (data.testId === testId && data.status === 'in_progress') {
+                        // If multiple in-progress attempts exist, use the most recent one
+                        if (!existingAttempt || (data.startedAt && existingAttempt.data.startedAt &&
+                            data.startedAt.seconds > existingAttempt.data.startedAt.seconds)) {
+                            existingAttempt = { id: d.id, data: data };
+                        }
+                    }
+                });
+
+                // If the existing attempt has expired (time ran out), auto-submit it and start fresh
+                if (existingAttempt) {
+                    var durationSecs = (test.duration || 30) * 60;
+                    if (existingAttempt.data.startedAt && existingAttempt.data.startedAt.seconds) {
+                        var elapsedSecs = Math.floor(Date.now() / 1000) - existingAttempt.data.startedAt.seconds;
+                        if (elapsedSecs >= durationSecs) {
+                            console.log('[Quiz] Found EXPIRED in-progress attempt, auto-submitting...');
+                            try {
+                                await submitAttempt(existingAttempt.id, existingAttempt.data.answers, 0, durationSecs);
+                                clearQuizState(existingAttempt.id);
+                            } catch (expErr) {
+                                console.warn('[Quiz] Failed to auto-submit expired attempt:', expErr);
+                            }
+                            existingAttempt = null; // Fall through to create new attempt
+                        }
+                    }
                 }
 
-                // Create attempt
-                var attempt = await createAttempt(user.uid, testId, questions);
-                var attemptId = attempt.id;
-                var answers = attempt.answers;
-                var currentIndex = 0;
+                if (existingAttempt) {
+                    // Resume existing attempt — keeps original question count intact
+                    console.log('[Quiz] RESUMING existing attempt:', existingAttempt.id,
+                        'with', existingAttempt.data.answers.length, 'questions');
+                    attemptId = existingAttempt.id;
+                    answers = existingAttempt.data.answers;
+
+                    // Reconstruct questions array from attempt's stored answers
+                    questions = answers.map(function(a) {
+                        return {
+                            id: a.questionId,
+                            question: a.questionText,
+                            optionA: a.optionA,
+                            optionB: a.optionB,
+                            optionC: a.optionC,
+                            optionD: a.optionD,
+                            correctAnswer: a.correctAnswer,
+                            difficulty: a.difficulty
+                        };
+                    });
+
+                    // Restore timer from localStorage if available
+                    var savedState = loadQuizState(attemptId);
+                    if (savedState && savedState.remainingSeconds > 0) {
+                        resumedTimer = savedState.remainingSeconds;
+                        console.log('[Quiz] Restoring timer:', resumedTimer, 'seconds remaining');
+                    } else {
+                        // Estimate remaining time from attempt start time
+                        var durationSecs = (test.duration || 30) * 60;
+                        if (existingAttempt.data.startedAt && existingAttempt.data.startedAt.seconds) {
+                            var elapsed = Math.floor(Date.now() / 1000) - existingAttempt.data.startedAt.seconds;
+                            var remaining = Math.max(0, durationSecs - elapsed);
+                            resumedTimer = remaining;
+                            console.log('[Quiz] Estimated timer from startedAt:', remaining, 'seconds remaining');
+                        }
+                    }
+                } else {
+                    // New attempt — select questions fresh
+                    console.log('[Quiz] No existing attempt, selecting questions...');
+                    questions = await selectQuestions(testId, test);
+
+                    // ─── Layer 2: Inline fill-up safety net ───
+                    // If selectQuestions returned fewer than configured (e.g., cached module
+                    // without fill-up logic), fill up by querying Firestore directly
+                    var totalTarget = test.totalQuestions || 30;
+                    if (questions.length < totalTarget && questions.length > 0) {
+                        console.log('[Quiz] INLINE FILL-UP: got', questions.length, 'need', totalTarget);
+                        try {
+                            var folderSvc = await import('./js/folder-service.js');
+                            if (test.folderId) {
+                                var allFolders = await folderSvc.loadAllFolders();
+                                var folderIds = folderSvc.getDescendantFolderIdsLocal(test.folderId, allFolders);
+                                var chunks = folderSvc.chunkArray(folderIds, 30);
+                                var existingIds = {};
+                                questions.forEach(function(q) { existingIds[q.id] = true; });
+                                var extraDocs = [];
+
+                                for (var ci = 0; ci < chunks.length; ci++) {
+                                    var snap = await getDocs(fsQuery(
+                                        collection(db, 'questions'),
+                                        where('folderId', 'in', chunks[ci])
+                                    ));
+                                    snap.forEach(function(d) {
+                                        var qd = d.data();
+                                        if (!existingIds[d.id] && qd.isActive) {
+                                            extraDocs.push({ id: d.id, qd: qd });
+                                        }
+                                    });
+                                }
+
+                                // Shuffle extra questions
+                                for (var si = extraDocs.length - 1; si > 0; si--) {
+                                    var sj = Math.floor(Math.random() * (si + 1));
+                                    var tmp = extraDocs[si]; extraDocs[si] = extraDocs[sj]; extraDocs[sj] = tmp;
+                                }
+
+                                var fillNeeded = totalTarget - questions.length;
+                                for (var fi = 0; fi < Math.min(fillNeeded, extraDocs.length); fi++) {
+                                    var ed = extraDocs[fi];
+                                    questions.push({
+                                        id: ed.id, question: ed.qd.question,
+                                        optionA: ed.qd.optionA, optionB: ed.qd.optionB,
+                                        optionC: ed.qd.optionC, optionD: ed.qd.optionD,
+                                        correctAnswer: ed.qd.correctAnswer,
+                                        difficulty: ed.qd.difficulty,
+                                        folderId: ed.qd.folderId, isActive: ed.qd.isActive
+                                    });
+                                }
+                                console.log('[Quiz] After inline fill-up:', questions.length, 'questions');
+                            }
+                        } catch (fillErr) {
+                            console.warn('[Quiz] Inline fill-up failed:', fillErr);
+                        }
+                    }
+
+                    if (questions.length === 0) {
+                        showToast('No questions available for this test', 'error');
+                        navigateTo('/dashboard.html');
+                        return;
+                    }
+
+                    console.log('[Quiz] Creating new attempt with', questions.length, 'questions');
+                    var attempt = await createAttempt(user.uid, testId, questions);
+                    attemptId = attempt.id;
+                    answers = attempt.answers;
+                }
 
                 // Init timer
                 var duration = test.duration || 30;
                 var timer = new QuizTimer(duration, onTimerTick, onTimerExpire);
+                if (resumedTimer !== null) {
+                    timer.setRemaining(resumedTimer);
+                }
 
                 // Show quiz
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('quiz-content').classList.remove('hidden');
                 document.getElementById('submit-btn').classList.remove('hidden');
+
+                console.log('[Quiz] Rendering quiz with', questions.length, 'questions, attempt:', attemptId);
 
                 renderQuestion();
                 renderGrid();
