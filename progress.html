@@ -40,149 +40,185 @@
         </div>
         <div id="test-progress" class="space-y-4"></div>
         <div id="empty-state" class="hidden"></div>
+
+        <!-- Error State -->
+        <div id="error-state" class="hidden text-center py-12">
+            <span class="material-symbols-outlined text-red-300 text-4xl mb-2">error</span>
+            <p class="text-sm font-medium text-slate-500 mb-1">Failed to load progress</p>
+            <p id="error-detail" class="text-[11px] text-red-400 mb-4 max-w-lg mx-auto break-words"></p>
+        </div>
     </main>
 
-    <script type="module">
-        import { requireAuth, BASE_PATH } from './js/auth.js';
-        import { renderStudentHeader, initLogout, statCard, badge, emptyState } from './js/ui.js';
-        import { db } from './js/firebase-config.js';
-        import { collection, query, where, getDocs, doc, getDoc, orderBy } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
-
-        initLogout();
-
-        try {
-            const user = await requireAuth();
-            document.getElementById('header').innerHTML = renderStudentHeader(user);
-            document.getElementById('back-link').href = `${BASE_PATH}/dashboard.html`;
-
-            // Fetch all attempts
-            const attemptsSnap = await getDocs(query(
-                collection(db, 'attempts'),
-                where('userId', '==', user.uid)
-            ));
-
-            if (attemptsSnap.empty) {
-                document.getElementById('overall-stats').classList.add('hidden');
-                document.getElementById('empty-state').classList.remove('hidden');
-                document.getElementById('empty-state').innerHTML = emptyState('trending_up', 'No attempts yet', 'Take a test to see your progress here');
-                return;
+    <script>
+        (async function() {
+            function showError(msg) {
+                document.getElementById('error-state').classList.remove('hidden');
+                document.getElementById('error-detail').textContent = msg;
             }
 
-            const attempts = [];
-            attemptsSnap.forEach(d => attempts.push({ id: d.id, ...d.data() }));
-            const completed = attempts.filter(a => a.status !== 'in_progress');
+            try {
+                var [authModule, uiModule, configModule, firestoreModule] = await Promise.all([
+                    import('./js/auth.js'),
+                    import('./js/ui.js'),
+                    import('./js/firebase-config.js'),
+                    import('https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js')
+                ]);
 
-            // Fetch test names
-            const testIds = [...new Set(attempts.map(a => a.testId))];
-            const testNames = {};
-            await Promise.all(testIds.map(async id => {
-                const d = await getDoc(doc(db, 'tests', id));
-                testNames[id] = d.exists() ? d.data().name : 'Unknown Test';
-            }));
+                var requireAuth = authModule.requireAuth;
+                var BASE_PATH = authModule.BASE_PATH;
+                var renderStudentHeader = uiModule.renderStudentHeader;
+                var initLogout = uiModule.initLogout;
+                var statCard = uiModule.statCard;
+                var badge = uiModule.badge;
+                var emptyState = uiModule.emptyState;
+                var db = configModule.db;
+                var collection = firestoreModule.collection;
+                var query = firestoreModule.query;
+                var where = firestoreModule.where;
+                var getDocs = firestoreModule.getDocs;
+                var doc = firestoreModule.doc;
+                var getDoc = firestoreModule.getDoc;
 
-            // Overall stats
-            const totalAttempts = completed.length;
-            const avgScore = totalAttempts > 0 ? Math.round(completed.reduce((s, a) => s + a.percentage, 0) / totalAttempts) : 0;
-            const bestScore = totalAttempts > 0 ? Math.max(...completed.map(a => a.percentage)) : 0;
-            const passRate = totalAttempts > 0 ? Math.round((completed.filter(a => a.percentage >= 70).length / totalAttempts) * 100) : 0;
+                initLogout();
 
-            document.getElementById('overall-stats').innerHTML = [
-                statCard('quiz', totalAttempts, 'Total Attempts'),
-                statCard('percent', avgScore + '%', 'Average Score'),
-                statCard('emoji_events', bestScore + '%', 'Best Score'),
-                statCard('check_circle', passRate + '%', 'Pass Rate')
-            ].join('');
+                var user = await requireAuth();
+                document.getElementById('header').innerHTML = renderStudentHeader(user);
+                document.getElementById('back-link').href = BASE_PATH + '/dashboard.html';
 
-            // Group by test
-            const byTest = {};
-            completed.forEach(a => {
-                if (!byTest[a.testId]) byTest[a.testId] = [];
-                byTest[a.testId].push(a);
-            });
+                // Fetch all attempts
+                var attemptsSnap = await getDocs(query(
+                    collection(db, 'attempts'),
+                    where('userId', '==', user.uid)
+                ));
 
-            // Sort each group by time
-            Object.values(byTest).forEach(arr => {
-                arr.sort((a, b) => {
-                    const ta = a.completedAt?.seconds || 0;
-                    const tb = b.completedAt?.seconds || 0;
-                    return tb - ta;
+                if (attemptsSnap.empty) {
+                    document.getElementById('overall-stats').classList.add('hidden');
+                    document.getElementById('empty-state').classList.remove('hidden');
+                    document.getElementById('empty-state').innerHTML = emptyState('trending_up', 'No attempts yet', 'Take a test to see your progress here');
+                    return;
+                }
+
+                var attempts = [];
+                attemptsSnap.forEach(function(d) { attempts.push({ id: d.id, ...d.data() }); });
+                var completed = attempts.filter(function(a) { return a.status !== 'in_progress'; });
+
+                // Fetch test names
+                var testIds = [];
+                var seen = {};
+                attempts.forEach(function(a) {
+                    if (!seen[a.testId]) { seen[a.testId] = true; testIds.push(a.testId); }
                 });
-            });
+                var testNames = {};
+                await Promise.all(testIds.map(async function(id) {
+                    var d = await getDoc(doc(db, 'tests', id));
+                    testNames[id] = d.exists() ? d.data().name : 'Unknown Test';
+                }));
 
-            document.getElementById('test-progress').innerHTML = Object.entries(byTest).map(([testId, testAttempts]) => {
-                const best = Math.max(...testAttempts.map(a => a.percentage));
-                const avg = Math.round(testAttempts.reduce((s, a) => s + a.percentage, 0) / testAttempts.length);
-                const latest = testAttempts[0];
+                // Overall stats
+                var totalAttempts = completed.length;
+                var avgScore = totalAttempts > 0 ? Math.round(completed.reduce(function(s, a) { return s + a.percentage; }, 0) / totalAttempts) : 0;
+                var bestScore = totalAttempts > 0 ? Math.max.apply(null, completed.map(function(a) { return a.percentage; })) : 0;
+                var passRate = totalAttempts > 0 ? Math.round((completed.filter(function(a) { return a.percentage >= 70; }).length / totalAttempts) * 100) : 0;
 
-                // Score trend bars (last 10)
-                const trendAttempts = testAttempts.slice(0, 10).reverse();
-                const trendBars = trendAttempts.map(a => {
-                    const h = Math.max(4, a.percentage * 0.6);
-                    const color = a.percentage >= 70 ? 'bg-emerald-500' : a.percentage >= 50 ? 'bg-amber-500' : 'bg-red-500';
-                    return `<div class="flex flex-col items-center gap-1">
-                        <div class="${color} rounded-sm" style="width: 16px; height: ${h}px"></div>
-                        <span class="text-[8px] text-slate-400">${a.percentage}%</span>
-                    </div>`;
+                document.getElementById('overall-stats').innerHTML = [
+                    statCard('quiz', totalAttempts, 'Total Attempts'),
+                    statCard('percent', avgScore + '%', 'Average Score'),
+                    statCard('emoji_events', bestScore + '%', 'Best Score'),
+                    statCard('check_circle', passRate + '%', 'Pass Rate')
+                ].join('');
+
+                // Group by test
+                var byTest = {};
+                completed.forEach(function(a) {
+                    if (!byTest[a.testId]) byTest[a.testId] = [];
+                    byTest[a.testId].push(a);
+                });
+
+                // Sort each group by time
+                Object.values(byTest).forEach(function(arr) {
+                    arr.sort(function(a, b) {
+                        var ta = a.completedAt && a.completedAt.seconds ? a.completedAt.seconds : 0;
+                        var tb = b.completedAt && b.completedAt.seconds ? b.completedAt.seconds : 0;
+                        return tb - ta;
+                    });
+                });
+
+                document.getElementById('test-progress').innerHTML = Object.entries(byTest).map(function(entry) {
+                    var testId = entry[0];
+                    var testAttempts = entry[1];
+                    var best = Math.max.apply(null, testAttempts.map(function(a) { return a.percentage; }));
+                    var avg = Math.round(testAttempts.reduce(function(s, a) { return s + a.percentage; }, 0) / testAttempts.length);
+                    var latest = testAttempts[0];
+
+                    // Score trend bars (last 10)
+                    var trendAttempts = testAttempts.slice(0, 10).reverse();
+                    var trendBars = trendAttempts.map(function(a) {
+                        var h = Math.max(4, a.percentage * 0.6);
+                        var color = a.percentage >= 70 ? 'bg-emerald-500' : a.percentage >= 50 ? 'bg-amber-500' : 'bg-red-500';
+                        return '<div class="flex flex-col items-center gap-1">' +
+                            '<div class="' + color + ' rounded-sm" style="width: 16px; height: ' + h + 'px"></div>' +
+                            '<span class="text-[8px] text-slate-400">' + a.percentage + '%</span>' +
+                        '</div>';
+                    }).join('');
+
+                    var recentHtml = testAttempts.slice(0, 5).map(function(a) {
+                        var date = a.completedAt ? new Date(a.completedAt.seconds * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A';
+                        var min = Math.floor(a.timeTaken / 60);
+                        return '<a href="' + BASE_PATH + '/results.html?attemptId=' + a.id + '" class="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors">' +
+                            '<div class="flex items-center gap-3">' +
+                                badge(a.percentage + '%', a.percentage >= 70 ? 'emerald' : a.percentage >= 50 ? 'amber' : 'red') +
+                                '<span class="text-[11px] text-slate-500">' + a.score + '/' + a.totalQuestions + ' correct</span>' +
+                            '</div>' +
+                            '<div class="flex items-center gap-3 text-[10px] text-slate-400">' +
+                                '<span>' + min + 'm</span>' +
+                                '<span>' + date + '</span>' +
+                                '<span class="material-symbols-outlined text-[14px]">arrow_forward</span>' +
+                            '</div>' +
+                        '</a>';
+                    }).join('');
+
+                    return '<div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 hover:shadow-md transition-all duration-300">' +
+                        '<div class="flex items-start justify-between mb-4">' +
+                            '<div>' +
+                                '<h3 class="text-sm font-bold text-slate-800">' + testNames[testId] + '</h3>' +
+                                '<p class="text-[10px] text-slate-400 mt-0.5">' + testAttempts.length + ' attempt' + (testAttempts.length !== 1 ? 's' : '') + '</p>' +
+                            '</div>' +
+                            '<a href="' + BASE_PATH + '/quiz.html?testId=' + testId + '" class="text-[11px] text-primary font-medium hover:underline flex items-center gap-1">' +
+                                'Retake <span class="material-symbols-outlined text-[14px]">arrow_forward</span>' +
+                            '</a>' +
+                        '</div>' +
+                        '<div class="grid grid-cols-3 gap-4 mb-4">' +
+                            '<div>' +
+                                '<div class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Best</div>' +
+                                '<div class="text-lg font-bold ' + (best >= 70 ? 'text-emerald-600' : best >= 50 ? 'text-amber-600' : 'text-red-600') + '">' + best + '%</div>' +
+                            '</div>' +
+                            '<div>' +
+                                '<div class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Average</div>' +
+                                '<div class="text-lg font-bold text-slate-800">' + avg + '%</div>' +
+                            '</div>' +
+                            '<div>' +
+                                '<div class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Latest</div>' +
+                                '<div class="text-lg font-bold text-slate-800">' + latest.percentage + '%</div>' +
+                            '</div>' +
+                        '</div>' +
+                        (trendAttempts.length > 1 ?
+                            '<div class="border-t border-slate-100 pt-4">' +
+                                '<div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Score Trend</div>' +
+                                '<div class="flex items-end gap-1.5">' + trendBars + '</div>' +
+                            '</div>'
+                        : '') +
+                        '<div class="border-t border-slate-100 pt-4 mt-4">' +
+                            '<div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Recent Attempts</div>' +
+                            '<div class="space-y-2">' + recentHtml + '</div>' +
+                        '</div>' +
+                    '</div>';
                 }).join('');
 
-                return `
-                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 hover:shadow-md transition-all duration-300">
-                        <div class="flex items-start justify-between mb-4">
-                            <div>
-                                <h3 class="text-sm font-bold text-slate-800">${testNames[testId]}</h3>
-                                <p class="text-[10px] text-slate-400 mt-0.5">${testAttempts.length} attempt${testAttempts.length !== 1 ? 's' : ''}</p>
-                            </div>
-                            <a href="${BASE_PATH}/quiz.html?testId=${testId}" class="text-[11px] text-primary font-medium hover:underline flex items-center gap-1">
-                                Retake <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
-                            </a>
-                        </div>
-                        <div class="grid grid-cols-3 gap-4 mb-4">
-                            <div>
-                                <div class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Best</div>
-                                <div class="text-lg font-bold ${best >= 70 ? 'text-emerald-600' : best >= 50 ? 'text-amber-600' : 'text-red-600'}">${best}%</div>
-                            </div>
-                            <div>
-                                <div class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Average</div>
-                                <div class="text-lg font-bold text-slate-800">${avg}%</div>
-                            </div>
-                            <div>
-                                <div class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Latest</div>
-                                <div class="text-lg font-bold text-slate-800">${latest.percentage}%</div>
-                            </div>
-                        </div>
-                        ${trendAttempts.length > 1 ? `
-                            <div class="border-t border-slate-100 pt-4">
-                                <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Score Trend</div>
-                                <div class="flex items-end gap-1.5">${trendBars}</div>
-                            </div>
-                        ` : ''}
-                        <div class="border-t border-slate-100 pt-4 mt-4">
-                            <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Recent Attempts</div>
-                            <div class="space-y-2">
-                                ${testAttempts.slice(0, 5).map(a => {
-                                    const date = a.completedAt ? new Date(a.completedAt.seconds * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A';
-                                    const min = Math.floor(a.timeTaken / 60);
-                                    return `
-                                        <a href="${BASE_PATH}/results.html?attemptId=${a.id}" class="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors">
-                                            <div class="flex items-center gap-3">
-                                                ${badge(a.percentage + '%', a.percentage >= 70 ? 'emerald' : a.percentage >= 50 ? 'amber' : 'red')}
-                                                <span class="text-[11px] text-slate-500">${a.score}/${a.totalQuestions} correct</span>
-                                            </div>
-                                            <div class="flex items-center gap-3 text-[10px] text-slate-400">
-                                                <span>${min}m</span>
-                                                <span>${date}</span>
-                                                <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
-                                            </div>
-                                        </a>`;
-                                }).join('')}
-                            </div>
-                        </div>
-                    </div>`;
-            }).join('');
-
-        } catch (e) {
-            console.error(e);
-        }
+            } catch (e) {
+                console.error('Progress page error:', e);
+                showError(e.message || String(e));
+            }
+        })();
     </script>
 </body>
 </html>
