@@ -168,9 +168,10 @@
                     '<div class="text-xl font-bold text-slate-800">' + answeredCount + '/' + totalQ + '</div>' +
                     '<div class="text-[10px] text-slate-400 font-medium mt-1">Questions Answered</div>';
 
-                // Question Review
-                if (answers.length > 0) {
-                    document.getElementById('question-review').innerHTML = answers.map(function(a, i) {
+                // Question Review — only show answered questions
+                var answeredQuestions = answers.filter(function(a) { return a.selectedAnswer; });
+                if (answeredQuestions.length > 0) {
+                    document.getElementById('question-review').innerHTML = answeredQuestions.map(function(a, i) {
                         var options = [
                             { letter: 'A', text: a.optionA || '' },
                             { letter: 'B', text: a.optionB || '' },
@@ -200,11 +201,10 @@
                                     return '<div class="' + cls + '">' + iconHtml + '<span class="font-bold text-[11px] w-5">' + o.letter + '.</span>' + o.text + '</div>';
                                 }).join('') +
                             '</div>' +
-                            (!a.selectedAnswer ? '<p class="text-[10px] text-slate-400 mt-2 pl-2 italic">Not answered</p>' : '') +
                         '</div>';
                     }).join('');
                 } else {
-                    document.getElementById('question-review').innerHTML = '<p class="text-[12px] text-slate-400 text-center py-4">No question data available for this attempt.</p>';
+                    document.getElementById('question-review').innerHTML = '<p class="text-[12px] text-slate-400 text-center py-4">No answered questions to review.</p>';
                 }
 
             } catch (e) {
