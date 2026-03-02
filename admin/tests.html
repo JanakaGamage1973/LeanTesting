@@ -51,6 +51,16 @@
                         <p class="text-[10px] text-slate-400 mt-1">Unique code used in the shareable link</p>
                     </div>
                     <div>
+                        <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Question Folder</label>
+                        <div id="folder-picker" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] cursor-pointer hover:border-primary transition-colors flex items-center justify-between"
+                            onclick="window.__openFolderPicker()">
+                            <span id="folder-picker-text" class="text-slate-400">Select a folder...</span>
+                            <span class="material-symbols-outlined text-[16px] text-slate-400">folder</span>
+                        </div>
+                        <input type="hidden" id="test-folder-id" value="" />
+                        <p class="text-[10px] text-slate-400 mt-1">Questions will be drawn from this folder and all its subfolders</p>
+                    </div>
+                    <div>
                         <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Duration (minutes)</label>
                         <input type="number" id="test-duration" value="30" min="5" max="120"
                             class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
@@ -109,17 +119,20 @@
 
     <script type="module">
         import { requireAdmin, BASE_PATH } from '../js/auth.js';
-        import { renderAdminSidebar, renderHeader, initLogout, showToast, badge, difficultyBadge, emptyState } from '../js/ui.js';
+        import { renderAdminSidebar, renderHeader, initLogout, showToast, showFolderPickerModal, badge, difficultyBadge, emptyState } from '../js/ui.js';
         import { db } from '../js/firebase-config.js';
         import { collection, getDocs, doc, setDoc, updateDoc, query, where, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
+        import { loadAllFolders, buildFolderTree, renderFolderPickerTree, getFolderBreadcrumb, getRecursiveQuestionCount } from '../js/folder-service.js';
 
         initLogout();
-        let adminUser;
+        let adminUser, folders = [], folderTree = [];
 
         try {
             adminUser = await requireAdmin();
             document.getElementById('sidebar').innerHTML = renderAdminSidebar('tests');
             document.getElementById('header').innerHTML = renderHeader(adminUser, 'Admin / Tests');
+            folders = await loadAllFolders();
+            folderTree = buildFolderTree(folders);
             await loadTests();
         } catch (e) { console.error(e); }
 
@@ -163,6 +176,9 @@
             document.getElementById('test-easy').value = 12;
             document.getElementById('test-medium').value = 9;
             document.getElementById('test-hard').value = 9;
+            document.getElementById('test-folder-id').value = '';
+            document.getElementById('folder-picker-text').textContent = 'Select a folder...';
+            document.getElementById('folder-picker-text').className = 'text-slate-400';
             document.getElementById('add-test-form').classList.remove('hidden');
         });
 
@@ -178,10 +194,17 @@
             try {
                 const editId = document.getElementById('edit-test-id').value;
                 const shareCode = document.getElementById('test-code').value.trim();
+                const folderId = document.getElementById('test-folder-id').value;
+                if (!folderId) {
+                    showToast('Please select a question folder', 'warning');
+                    btn.disabled = false;
+                    return;
+                }
                 const data = {
                     name: document.getElementById('test-name').value.trim(),
                     description: document.getElementById('test-desc').value.trim(),
                     shareCode,
+                    folderId,
                     duration: parseInt(document.getElementById('test-duration').value),
                     totalQuestions: parseInt(document.getElementById('test-total').value),
                     easyCount: parseInt(document.getElementById('test-easy').value),
@@ -228,14 +251,60 @@
             }
             emptyEl.classList.add('hidden');
 
-            // Count questions per test per difficulty
+            // Build a map of folderId → descendant folder IDs for question counting
+            const folderDescendants = {};
+            folders.forEach(f => {
+                if (!folderDescendants[f.id]) {
+                    folderDescendants[f.id] = new Set();
+                }
+                folderDescendants[f.id].add(f.id);
+                // Add this folder to all ancestors' sets
+                const pathParts = (f.path || '').split('/').filter(Boolean);
+                pathParts.forEach(ancestorId => {
+                    if (!folderDescendants[ancestorId]) folderDescendants[ancestorId] = new Set();
+                    folderDescendants[ancestorId].add(f.id);
+                });
+            });
+
+            // Count questions per folder per difficulty
+            const qByFolder = {};
+            questionsSnap.forEach(d => {
+                const data = d.data();
+                if (!data.isActive) return;
+                const fid = data.folderId || data.testId;
+                if (!qByFolder[fid]) qByFolder[fid] = { easy: 0, medium: 0, hard: 0, total: 0 };
+                qByFolder[fid][data.difficulty]++;
+                qByFolder[fid].total++;
+            });
+
+            // Helper: get question counts for a test's folder tree
+            function getQCountForTest(test) {
+                const fid = test.folderId;
+                if (!fid) return { easy: 0, medium: 0, hard: 0, total: 0 };
+                const descendantIds = folderDescendants[fid] || new Set([fid]);
+                const result = { easy: 0, medium: 0, hard: 0, total: 0 };
+                descendantIds.forEach(id => {
+                    const counts = qByFolder[id];
+                    if (counts) {
+                        result.easy += counts.easy;
+                        result.medium += counts.medium;
+                        result.hard += counts.hard;
+                        result.total += counts.total;
+                    }
+                });
+                return result;
+            }
+
+            // Legacy: Count questions per test by testId (for un-migrated data)
             const qCount = {};
             questionsSnap.forEach(d => {
                 const data = d.data();
                 if (!data.isActive) return;
                 if (!qCount[data.testId]) qCount[data.testId] = { easy: 0, medium: 0, hard: 0, total: 0 };
-                qCount[data.testId][data.difficulty]++;
-                qCount[data.testId].total++;
+                if (data.testId) {
+                    qCount[data.testId][data.difficulty]++;
+                    qCount[data.testId].total++;
+                }
             });
 
             // Count attempts per test
@@ -248,10 +317,16 @@
                 aCount[data.testId].totalPct += data.percentage;
             });
 
+            // Build folder name map
+            const folderNameMap = {};
+            folders.forEach(f => { folderNameMap[f.id] = f.name; });
+
             listEl.innerHTML = testsSnap.docs.map(d => {
                 const test = d.data();
-                const qc = qCount[d.id] || { easy: 0, medium: 0, hard: 0, total: 0 };
+                const qc = test.folderId ? getQCountForTest(test) : (qCount[d.id] || { easy: 0, medium: 0, hard: 0, total: 0 });
                 const ac = aCount[d.id] || { count: 0, totalPct: 0 };
+                const folderName = test.folderId ? (folderNameMap[test.folderId] || 'Unknown') : null;
+                const folderPath = test.folderId ? getFolderBreadcrumb(test.folderId, folders) : null;
                 const avgPct = ac.count > 0 ? Math.round(ac.totalPct / ac.count) : 0;
                 const date = test.createdAt ? new Date(test.createdAt.seconds * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A';
 
@@ -264,6 +339,10 @@
                                     ${badge(test.isActive ? 'Active' : 'Inactive', test.isActive ? 'emerald' : 'slate')}
                                 </div>
                                 <p class="text-[11px] text-slate-400 mt-1">${test.description || 'No description'}</p>
+                                ${folderPath ? `<div class="flex items-center gap-1 text-[10px] text-slate-400 mt-1">
+                                    <span class="material-symbols-outlined text-[12px]">folder</span>
+                                    <span>${folderPath}</span>
+                                </div>` : ''}
                             </div>
                             <div class="flex items-center gap-1">
                                 <button onclick="window.__editTest('${d.id}')" class="size-8 rounded-full hover:bg-slate-100 flex items-center justify-center transition-colors" title="Edit">
@@ -313,7 +392,7 @@
                         ` : ''}
                         <div class="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
                             <span class="text-[10px] text-slate-400">Created ${date}</span>
-                            <a href="${BASE_PATH}/admin/questions.html?testId=${d.id}" class="text-[11px] text-primary font-medium hover:underline flex items-center gap-1">
+                            <a href="${BASE_PATH}/admin/questions.html${test.folderId ? '?folderId=' + test.folderId : ''}" class="text-[11px] text-primary font-medium hover:underline flex items-center gap-1">
                                 Manage Questions <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
                             </a>
                         </div>
@@ -338,6 +417,19 @@
             document.getElementById('test-hard').value = test.hardCount;
             document.getElementById('test-code').value = test.shareCode || '';
             document.getElementById('test-status').value = test.isActive ? 'true' : 'false';
+
+            // Set folder picker
+            if (test.folderId) {
+                document.getElementById('test-folder-id').value = test.folderId;
+                const path = getFolderBreadcrumb(test.folderId, folders);
+                document.getElementById('folder-picker-text').textContent = path || 'Unknown folder';
+                document.getElementById('folder-picker-text').className = 'text-slate-700 font-medium';
+            } else {
+                document.getElementById('test-folder-id').value = '';
+                document.getElementById('folder-picker-text').textContent = 'Select a folder...';
+                document.getElementById('folder-picker-text').className = 'text-slate-400';
+            }
+
             document.getElementById('add-test-form').classList.remove('hidden');
             document.getElementById('add-test-form').scrollIntoView({ behavior: 'smooth' });
         };
@@ -362,6 +454,34 @@
                 await loadTests();
             } catch (e) {
                 showToast('Failed to update test', 'error');
+            }
+        };
+
+        // Folder picker modal
+        let pickerSelectedId = '';
+
+        window.__openFolderPicker = () => {
+            pickerSelectedId = document.getElementById('test-folder-id').value;
+            const treeHtml = renderFolderPickerTree(folderTree, pickerSelectedId, folders);
+            const modal = showFolderPickerModal(treeHtml);
+
+            document.getElementById('picker-confirm').onclick = () => {
+                if (pickerSelectedId) {
+                    document.getElementById('test-folder-id').value = pickerSelectedId;
+                    const path = getFolderBreadcrumb(pickerSelectedId, folders);
+                    document.getElementById('folder-picker-text').textContent = path;
+                    document.getElementById('folder-picker-text').className = 'text-slate-700 font-medium';
+                }
+                modal.close();
+            };
+        };
+
+        window.__pickFolder = (folderId, folderPath) => {
+            pickerSelectedId = folderId;
+            // Re-render the picker tree with new selection
+            const container = document.getElementById('picker-tree-container');
+            if (container) {
+                container.innerHTML = renderFolderPickerTree(folderTree, pickerSelectedId, folders);
             }
         };
     </script>

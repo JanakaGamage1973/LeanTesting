@@ -15,86 +15,106 @@
 </head>
 <body class="bg-slate-50 min-h-screen flex">
     <aside id="sidebar" class="w-52 bg-white border-r border-slate-100 fixed h-screen overflow-y-auto"></aside>
-    <div class="flex-1 ml-52">
-        <header id="header" class="h-16 sticky top-0 bg-white/80 backdrop-blur-md border-b border-slate-100 z-40"></header>
-        <main class="p-6 page-enter">
-            <div class="flex items-center justify-between mb-6">
-                <h1 class="text-lg font-bold text-slate-800">Questions</h1>
-                <div class="flex items-center gap-3">
-                    <button id="add-single-btn" class="border border-slate-200 text-slate-500 px-4 py-2 rounded-xl text-[11px] font-medium hover:bg-slate-50 transition-colors flex items-center gap-2">
-                        <span class="material-symbols-outlined text-[16px]">add</span>
-                        Add Question
-                    </button>
-                    <button id="upload-btn" class="bg-primary text-white px-4 py-2 rounded-xl text-[11px] font-bold hover:bg-indigo-600 shadow-lg shadow-primary/20 transition-all flex items-center gap-2">
-                        <span class="material-symbols-outlined text-[16px]">upload_file</span>
-                        Upload CSV/JSON
+    <div class="flex-1 ml-52 flex">
+        <!-- Folder Tree Panel -->
+        <aside id="folder-panel" class="w-64 bg-white border-r border-slate-100 sticky top-0 h-screen overflow-y-auto folder-panel flex-shrink-0">
+            <div class="p-4">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Folders</span>
+                    <button id="add-root-folder-btn" class="size-6 rounded-lg hover:bg-slate-100 flex items-center justify-center transition-colors" title="New Folder">
+                        <span class="material-symbols-outlined text-slate-400 text-[16px]">create_new_folder</span>
                     </button>
                 </div>
+                <!-- All Questions option -->
+                <div id="all-questions-item" class="flex items-center gap-2 py-1.5 px-2 rounded-lg cursor-pointer bg-primary/10 text-primary font-semibold mb-2 transition-all"
+                    onclick="window.__selectFolder('')">
+                    <span class="material-symbols-outlined text-[16px] text-primary">folder_special</span>
+                    <span class="text-[12px] flex-1">All Questions</span>
+                    <span id="all-count" class="text-[9px] text-primary/60 font-bold tabular-nums">0</span>
+                </div>
+                <div id="folder-tree" class="folder-tree"></div>
             </div>
+        </aside>
 
-            <!-- Upload Section -->
-            <div id="upload-section" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-6 hidden">
-                <h3 class="text-sm font-bold text-slate-800 mb-2">Upload Questions</h3>
-                <p class="text-[11px] text-slate-500 mb-4">Upload a CSV or JSON file with your questions. <a href="#" id="download-template" class="text-primary hover:underline">Download CSV template</a></p>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <!-- Main Content -->
+        <div class="flex-1 flex flex-col min-w-0">
+            <header id="header" class="h-16 sticky top-0 bg-white/80 backdrop-blur-md border-b border-slate-100 z-40"></header>
+            <main class="p-6 page-enter flex-1">
+                <!-- Breadcrumb & Actions -->
+                <div class="flex items-center justify-between mb-4">
                     <div>
-                        <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Target Test</label>
-                        <select id="upload-test-select" required
-                            class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
-                            <option value="">Select a test...</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div id="drop-zone" class="drop-zone rounded-2xl p-8 text-center cursor-pointer mb-4">
-                    <input type="file" id="file-input" accept=".csv,.json" class="hidden" />
-                    <span class="material-symbols-outlined text-slate-300 text-4xl mb-2">cloud_upload</span>
-                    <p class="text-[12px] font-medium text-slate-500">Drop your file here or click to browse</p>
-                    <p class="text-[10px] text-slate-400 mt-1">Supports CSV and JSON formats</p>
-                </div>
-
-                <!-- Upload Preview -->
-                <div id="upload-preview" class="hidden">
-                    <div class="flex items-center justify-between mb-3">
-                        <div>
-                            <span id="upload-count" class="text-[12px] font-bold text-slate-800"></span>
-                            <span id="upload-errors" class="text-[12px] text-red-500 ml-2"></span>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <button id="cancel-upload" class="border border-slate-200 text-slate-500 px-3 py-1.5 rounded-lg text-[11px] font-medium hover:bg-slate-50 transition-colors">Cancel</button>
-                            <button id="confirm-upload" class="bg-primary text-white px-4 py-1.5 rounded-lg text-[11px] font-bold hover:bg-indigo-600 transition-colors">Confirm Import</button>
+                        <h1 class="text-lg font-bold text-slate-800">Questions</h1>
+                        <div id="folder-breadcrumb" class="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
+                            <span class="material-symbols-outlined text-[12px]">folder</span>
+                            All Folders
                         </div>
                     </div>
-                    <div class="max-h-64 overflow-y-auto border border-slate-100 rounded-xl">
-                        <table class="w-full text-[11px]">
-                            <thead class="sticky top-0 bg-white">
-                                <tr class="border-b border-slate-100">
-                                    <th class="text-left p-2 text-[10px] uppercase text-slate-400 font-medium tracking-wider">#</th>
-                                    <th class="text-left p-2 text-[10px] uppercase text-slate-400 font-medium tracking-wider">Question</th>
-                                    <th class="text-left p-2 text-[10px] uppercase text-slate-400 font-medium tracking-wider">Answer</th>
-                                    <th class="text-left p-2 text-[10px] uppercase text-slate-400 font-medium tracking-wider">Difficulty</th>
-                                    <th class="text-left p-2 text-[10px] uppercase text-slate-400 font-medium tracking-wider">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody id="preview-table"></tbody>
-                        </table>
+                    <div class="flex items-center gap-3">
+                        <button id="add-single-btn" class="border border-slate-200 text-slate-500 px-4 py-2 rounded-xl text-[11px] font-medium hover:bg-slate-50 transition-colors flex items-center gap-2">
+                            <span class="material-symbols-outlined text-[16px]">add</span>
+                            Add Question
+                        </button>
+                        <button id="upload-btn" class="bg-primary text-white px-4 py-2 rounded-xl text-[11px] font-bold hover:bg-indigo-600 shadow-lg shadow-primary/20 transition-all flex items-center gap-2">
+                            <span class="material-symbols-outlined text-[16px]">upload_file</span>
+                            Upload CSV/JSON
+                        </button>
                     </div>
                 </div>
-            </div>
 
-            <!-- Single Question Form -->
-            <div id="single-form-section" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-6 hidden">
-                <h3 class="text-sm font-bold text-slate-800 mb-4" id="single-form-title">Add Question</h3>
-                <form id="single-form" class="space-y-4">
-                    <input type="hidden" id="edit-question-id" value="" />
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Test</label>
-                            <select id="single-test-select" required
-                                class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
-                                <option value="">Select a test...</option>
-                            </select>
+                <!-- Upload Section -->
+                <div id="upload-section" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-6 hidden">
+                    <h3 class="text-sm font-bold text-slate-800 mb-2">Upload Questions</h3>
+                    <p class="text-[11px] text-slate-500 mb-4">Upload a CSV or JSON file. Questions will be added to the selected folder. <a href="#" id="download-template" class="text-primary hover:underline">Download CSV template</a></p>
+
+                    <div id="upload-folder-info" class="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2 mb-4 text-[11px] text-slate-600">
+                        <span class="material-symbols-outlined text-[14px] text-slate-400">folder</span>
+                        <span id="upload-folder-name">Select a folder first</span>
+                    </div>
+
+                    <div id="drop-zone" class="drop-zone rounded-2xl p-8 text-center cursor-pointer mb-4">
+                        <input type="file" id="file-input" accept=".csv,.json" class="hidden" />
+                        <span class="material-symbols-outlined text-slate-300 text-4xl mb-2">cloud_upload</span>
+                        <p class="text-[12px] font-medium text-slate-500">Drop your file here or click to browse</p>
+                        <p class="text-[10px] text-slate-400 mt-1">Supports CSV and JSON formats</p>
+                    </div>
+
+                    <!-- Upload Preview -->
+                    <div id="upload-preview" class="hidden">
+                        <div class="flex items-center justify-between mb-3">
+                            <div>
+                                <span id="upload-count" class="text-[12px] font-bold text-slate-800"></span>
+                                <span id="upload-errors" class="text-[12px] text-red-500 ml-2"></span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button id="cancel-upload" class="border border-slate-200 text-slate-500 px-3 py-1.5 rounded-lg text-[11px] font-medium hover:bg-slate-50 transition-colors">Cancel</button>
+                                <button id="confirm-upload" class="bg-primary text-white px-4 py-1.5 rounded-lg text-[11px] font-bold hover:bg-indigo-600 transition-colors">Confirm Import</button>
+                            </div>
+                        </div>
+                        <div class="max-h-64 overflow-y-auto border border-slate-100 rounded-xl">
+                            <table class="w-full text-[11px]">
+                                <thead class="sticky top-0 bg-white">
+                                    <tr class="border-b border-slate-100">
+                                        <th class="text-left p-2 text-[10px] uppercase text-slate-400 font-medium tracking-wider">#</th>
+                                        <th class="text-left p-2 text-[10px] uppercase text-slate-400 font-medium tracking-wider">Question</th>
+                                        <th class="text-left p-2 text-[10px] uppercase text-slate-400 font-medium tracking-wider">Answer</th>
+                                        <th class="text-left p-2 text-[10px] uppercase text-slate-400 font-medium tracking-wider">Difficulty</th>
+                                        <th class="text-left p-2 text-[10px] uppercase text-slate-400 font-medium tracking-wider">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="preview-table"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Single Question Form -->
+                <div id="single-form-section" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-6 hidden">
+                    <h3 class="text-sm font-bold text-slate-800 mb-4" id="single-form-title">Add Question</h3>
+                    <form id="single-form" class="space-y-4">
+                        <input type="hidden" id="edit-question-id" value="" />
+                        <div id="single-folder-info" class="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2 text-[11px] text-slate-600">
+                            <span class="material-symbols-outlined text-[14px] text-slate-400">folder</span>
+                            <span id="single-folder-name">Select a folder first</span>
                         </div>
                         <div>
                             <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Difficulty</label>
@@ -105,135 +125,283 @@
                                 <option value="hard">Hard</option>
                             </select>
                         </div>
-                    </div>
-                    <div>
-                        <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Question</label>
-                        <textarea id="single-question" rows="2" required
-                            class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-none"></textarea>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Option A</label>
-                            <input type="text" id="single-a" required class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+                            <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Question</label>
+                            <textarea id="single-question" rows="2" required
+                                class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-none"></textarea>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Option A</label>
+                                <input type="text" id="single-a" required class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Option B</label>
+                                <input type="text" id="single-b" required class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Option C</label>
+                                <input type="text" id="single-c" required class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Option D</label>
+                                <input type="text" id="single-d" required class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+                            </div>
                         </div>
                         <div>
-                            <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Option B</label>
-                            <input type="text" id="single-b" required class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+                            <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Correct Answer</label>
+                            <select id="single-correct" required class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                                <option value="A">A</option>
+                                <option value="B">B</option>
+                                <option value="C">C</option>
+                                <option value="D">D</option>
+                            </select>
                         </div>
-                        <div>
-                            <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Option C</label>
-                            <input type="text" id="single-c" required class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+                        <div class="flex items-center gap-3">
+                            <button type="submit" class="bg-primary text-white px-4 py-2 rounded-xl text-[11px] font-bold hover:bg-indigo-600 transition-colors">Save Question</button>
+                            <button type="button" id="cancel-single" class="border border-slate-200 text-slate-500 px-4 py-2 rounded-xl text-[11px] font-medium hover:bg-slate-50 transition-colors">Cancel</button>
                         </div>
-                        <div>
-                            <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Option D</label>
-                            <input type="text" id="single-d" required class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
-                        </div>
-                    </div>
-                    <div>
-                        <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider block mb-1.5">Correct Answer</label>
-                        <select id="single-correct" required class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
-                            <option value="A">A</option>
-                            <option value="B">B</option>
-                            <option value="C">C</option>
-                            <option value="D">D</option>
-                        </select>
-                    </div>
-                    <div class="flex items-center gap-3">
-                        <button type="submit" class="bg-primary text-white px-4 py-2 rounded-xl text-[11px] font-bold hover:bg-indigo-600 transition-colors">Save Question</button>
-                        <button type="button" id="cancel-single" class="border border-slate-200 text-slate-500 px-4 py-2 rounded-xl text-[11px] font-medium hover:bg-slate-50 transition-colors">Cancel</button>
-                    </div>
-                </form>
-            </div>
-
-            <!-- Filter -->
-            <div class="flex items-center gap-3 mb-4">
-                <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Filter by Test:</label>
-                <select id="filter-test" class="border border-slate-200 rounded-xl px-3 py-1.5 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
-                    <option value="">All Tests</option>
-                </select>
-                <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider ml-4">Difficulty:</label>
-                <select id="filter-difficulty" class="border border-slate-200 rounded-xl px-3 py-1.5 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
-                    <option value="">All</option>
-                    <option value="easy">Easy</option>
-                    <option value="medium">Medium</option>
-                    <option value="hard">Hard</option>
-                </select>
-                <span id="question-count" class="text-[10px] text-slate-400 ml-auto"></span>
-            </div>
-
-            <!-- Questions Table -->
-            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                <div class="max-h-[600px] overflow-y-auto">
-                    <table class="w-full">
-                        <thead class="sticky top-0 bg-white z-10">
-                            <tr class="border-b border-slate-100">
-                                <th class="text-left text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4">Question</th>
-                                <th class="text-left text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4 w-24">Answer</th>
-                                <th class="text-left text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4 w-24">Difficulty</th>
-                                <th class="text-left text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4 w-32">Test</th>
-                                <th class="text-right text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4 w-20">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="questions-table"></tbody>
-                    </table>
+                    </form>
                 </div>
-                <div id="empty-questions" class="hidden"></div>
-            </div>
-        </main>
+
+                <!-- Filter -->
+                <div class="flex items-center gap-3 mb-4">
+                    <label class="flex items-center gap-2 text-[11px] text-slate-500 cursor-pointer">
+                        <input type="checkbox" id="include-subfolders" class="rounded border-slate-300 text-primary focus:ring-primary/20" />
+                        Include subfolders
+                    </label>
+                    <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider ml-4">Difficulty:</label>
+                    <select id="filter-difficulty" class="border border-slate-200 rounded-xl px-3 py-1.5 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                        <option value="">All</option>
+                        <option value="easy">Easy</option>
+                        <option value="medium">Medium</option>
+                        <option value="hard">Hard</option>
+                    </select>
+                    <span id="question-count" class="text-[10px] text-slate-400 ml-auto"></span>
+                </div>
+
+                <!-- Questions Table -->
+                <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                    <div class="max-h-[600px] overflow-y-auto">
+                        <table class="w-full">
+                            <thead class="sticky top-0 bg-white z-10">
+                                <tr class="border-b border-slate-100">
+                                    <th class="text-left text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4">Question</th>
+                                    <th class="text-left text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4 w-24">Answer</th>
+                                    <th class="text-left text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4 w-24">Difficulty</th>
+                                    <th class="text-left text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4 w-32">Folder</th>
+                                    <th class="text-right text-[10px] uppercase text-slate-400 font-medium tracking-wider p-4 w-20">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="questions-table"></tbody>
+                        </table>
+                    </div>
+                    <div id="empty-questions" class="hidden"></div>
+                </div>
+            </main>
+        </div>
     </div>
 
     <script type="module">
         import { requireAdmin, BASE_PATH } from '../js/auth.js';
-        import { renderAdminSidebar, renderHeader, initLogout, showToast, showModal, badge, difficultyBadge, emptyState } from '../js/ui.js';
+        import { renderAdminSidebar, renderHeader, initLogout, showToast, showModal, showPromptModal, showContextMenu, badge, difficultyBadge, emptyState } from '../js/ui.js';
         import { db } from '../js/firebase-config.js';
-        import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, query, where } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
+        import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, query, where, getDoc } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
         import { parseCSV, parseJSON } from '../js/csv-parser.js';
+        import { loadAllFolders, buildFolderTree, createFolder, renameFolder, deleteFolder, renderFolderTree, getFolderBreadcrumb, getDescendantFolderIdsLocal, incrementQuestionCount } from '../js/folder-service.js';
 
         initLogout();
-        let adminUser, tests = [], parsedQuestions = [];
+        let adminUser, folders = [], folderTree = [], parsedQuestions = [];
+        let selectedFolderId = '';  // '' means "All Questions"
+        let expandedFolders = new Set();
+
+        // Load expanded state from localStorage
+        try {
+            const saved = JSON.parse(localStorage.getItem('lt_expanded_folders') || '[]');
+            expandedFolders = new Set(saved);
+        } catch (e) {}
+
+        function saveExpandedState() {
+            localStorage.setItem('lt_expanded_folders', JSON.stringify([...expandedFolders]));
+        }
 
         try {
             adminUser = await requireAdmin();
             document.getElementById('sidebar').innerHTML = renderAdminSidebar('questions');
             document.getElementById('header').innerHTML = renderHeader(adminUser, 'Admin / Questions');
 
-            // Load tests for dropdowns
-            const testsSnap = await getDocs(collection(db, 'tests'));
-            testsSnap.forEach(d => tests.push({ id: d.id, ...d.data() }));
-            populateTestDropdowns();
+            // Pre-select folder if in URL
+            const urlFolderId = new URLSearchParams(window.location.search).get('folderId');
+            if (urlFolderId) selectedFolderId = urlFolderId;
 
-            // Pre-select test if in URL
-            const urlTestId = new URLSearchParams(window.location.search).get('testId');
-            if (urlTestId) {
-                document.getElementById('filter-test').value = urlTestId;
-                document.getElementById('upload-test-select').value = urlTestId;
-                document.getElementById('single-test-select').value = urlTestId;
-            }
-
+            await refreshFolders();
             await loadQuestions();
         } catch (e) { console.error(e); }
 
-        function populateTestDropdowns() {
-            const opts = tests.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
-            ['upload-test-select', 'single-test-select', 'filter-test'].forEach(id => {
-                const el = document.getElementById(id);
-                const defaultOpt = el.querySelector('option');
-                el.innerHTML = defaultOpt.outerHTML + opts;
+        // ── Folder Tree ──────────────────────────────────────────────
+
+        async function refreshFolders() {
+            folders = await loadAllFolders();
+            folderTree = buildFolderTree(folders);
+
+            // Auto-expand root folders
+            folderTree.forEach(r => expandedFolders.add(r.id));
+            saveExpandedState();
+
+            renderTree();
+            updateAllCount();
+        }
+
+        function renderTree() {
+            const html = renderFolderTree(folderTree, selectedFolderId, expandedFolders, folders);
+            document.getElementById('folder-tree').innerHTML = html;
+
+            // Update "All Questions" selected state
+            const allItem = document.getElementById('all-questions-item');
+            if (!selectedFolderId) {
+                allItem.className = 'flex items-center gap-2 py-1.5 px-2 rounded-lg cursor-pointer bg-primary/10 text-primary font-semibold mb-2 transition-all';
+            } else {
+                allItem.className = 'flex items-center gap-2 py-1.5 px-2 rounded-lg cursor-pointer text-slate-600 hover:bg-slate-50 mb-2 transition-all';
+            }
+        }
+
+        function updateAllCount() {
+            const total = folders.reduce((sum, f) => sum + (f.questionCount || 0), 0);
+            document.getElementById('all-count').textContent = total;
+        }
+
+        function updateBreadcrumb() {
+            const el = document.getElementById('folder-breadcrumb');
+            if (!selectedFolderId) {
+                el.innerHTML = '<span class="material-symbols-outlined text-[12px]">folder_special</span> All Folders';
+            } else {
+                const path = getFolderBreadcrumb(selectedFolderId, folders);
+                el.innerHTML = `<span class="material-symbols-outlined text-[12px]">folder</span> ${path}`;
+            }
+
+            // Update upload and single-add folder info
+            const folderName = selectedFolderId
+                ? getFolderBreadcrumb(selectedFolderId, folders)
+                : 'No folder selected';
+            document.getElementById('upload-folder-name').textContent = folderName;
+            document.getElementById('single-folder-name').textContent = folderName;
+        }
+
+        // ── Folder Interactions ──────────────────────────────────────
+
+        window.__selectFolder = (folderId) => {
+            selectedFolderId = folderId;
+            renderTree();
+            updateBreadcrumb();
+            loadQuestions();
+        };
+
+        window.__toggleExpand = (folderId) => {
+            if (expandedFolders.has(folderId)) {
+                expandedFolders.delete(folderId);
+            } else {
+                expandedFolders.add(folderId);
+            }
+            saveExpandedState();
+            renderTree();
+        };
+
+        window.__folderMenu = (folderId, event) => {
+            event.stopPropagation();
+            const folder = folders.find(f => f.id === folderId);
+            if (!folder) return;
+
+            showContextMenu([
+                { icon: 'create_new_folder', label: 'Add Subfolder', action: () => addSubfolder(folderId) },
+                { icon: 'edit', label: 'Rename', action: () => renameFolderPrompt(folderId, folder.name) },
+                { divider: true },
+                { icon: 'delete', label: 'Delete Folder', danger: true, action: () => deleteFolderConfirm(folderId, folder.name) }
+            ], event.clientX, event.clientY);
+        };
+
+        // Add root folder
+        document.getElementById('add-root-folder-btn').addEventListener('click', () => {
+            showPromptModal('New Folder', 'Folder name', '', async (name) => {
+                try {
+                    await createFolder(name, null, adminUser.uid);
+                    showToast('Folder created', 'success');
+                    await refreshFolders();
+                } catch (err) {
+                    showToast('Failed to create folder: ' + err.message, 'error');
+                }
+            });
+        });
+
+        function addSubfolder(parentId) {
+            showPromptModal('New Subfolder', 'Folder name', '', async (name) => {
+                try {
+                    const newFolder = await createFolder(name, parentId, adminUser.uid);
+                    expandedFolders.add(parentId);
+                    saveExpandedState();
+                    showToast('Subfolder created', 'success');
+                    await refreshFolders();
+                } catch (err) {
+                    showToast('Failed to create folder: ' + err.message, 'error');
+                }
             });
         }
 
-        // Upload section toggle
+        function renameFolderPrompt(folderId, currentName) {
+            showPromptModal('Rename Folder', 'Folder name', currentName, async (newName) => {
+                try {
+                    await renameFolder(folderId, newName);
+                    showToast('Folder renamed', 'success');
+                    await refreshFolders();
+                    updateBreadcrumb();
+                } catch (err) {
+                    showToast('Failed to rename folder: ' + err.message, 'error');
+                }
+            });
+        }
+
+        function deleteFolderConfirm(folderId, folderName) {
+            showModal(
+                'Delete Folder',
+                `Are you sure you want to delete "<strong>${folderName}</strong>" and all its subfolders? Questions in these folders will be deactivated.`,
+                async () => {
+                    try {
+                        await deleteFolder(folderId);
+                        if (selectedFolderId === folderId) selectedFolderId = '';
+                        showToast('Folder deleted', 'success');
+                        await refreshFolders();
+                        updateBreadcrumb();
+                        await loadQuestions();
+                    } catch (err) {
+                        showToast('Failed to delete folder: ' + err.message, 'error');
+                    }
+                },
+                'Delete', 'bg-red-500 hover:bg-red-600'
+            );
+        }
+
+        // ── Upload Section ───────────────────────────────────────────
+
         document.getElementById('upload-btn').addEventListener('click', () => {
+            if (!selectedFolderId) {
+                showToast('Please select a folder first', 'warning');
+                return;
+            }
             document.getElementById('upload-section').classList.toggle('hidden');
             document.getElementById('single-form-section').classList.add('hidden');
         });
+
         document.getElementById('add-single-btn').addEventListener('click', () => {
+            if (!selectedFolderId) {
+                showToast('Please select a folder first', 'warning');
+                return;
+            }
             document.getElementById('single-form-section').classList.toggle('hidden');
             document.getElementById('upload-section').classList.add('hidden');
             document.getElementById('edit-question-id').value = '';
             document.getElementById('single-form-title').textContent = 'Add Question';
             document.getElementById('single-form').reset();
         });
+
         document.getElementById('cancel-single').addEventListener('click', () => {
             document.getElementById('single-form-section').classList.add('hidden');
         });
@@ -300,8 +468,7 @@
         });
 
         document.getElementById('confirm-upload').addEventListener('click', async () => {
-            const testId = document.getElementById('upload-test-select').value;
-            if (!testId) { showToast('Please select a target test', 'warning'); return; }
+            if (!selectedFolderId) { showToast('Please select a folder first', 'warning'); return; }
             if (parsedQuestions.length === 0) { showToast('No valid questions to import', 'warning'); return; }
 
             const btn = document.getElementById('confirm-upload');
@@ -318,7 +485,7 @@
                     for (const q of chunk) {
                         const ref = doc(collection(db, 'questions'));
                         batch.set(ref, {
-                            ...q, testId,
+                            ...q, folderId: selectedFolderId,
                             createdBy: adminUser.uid,
                             createdAt: serverTimestamp(),
                             isActive: true
@@ -326,12 +493,16 @@
                     }
                     await batch.commit();
                 }
+
+                // Update folder question count
+                await incrementQuestionCount(selectedFolderId, parsedQuestions.length);
+
                 showToast(`${parsedQuestions.length} questions imported`, 'success');
                 document.getElementById('upload-section').classList.add('hidden');
                 document.getElementById('upload-preview').classList.add('hidden');
                 parsedQuestions = [];
                 fileInput.value = '';
-                document.getElementById('filter-test').value = testId;
+                await refreshFolders();
                 await loadQuestions();
             } catch (err) {
                 showToast('Import failed: ' + err.message, 'error');
@@ -342,13 +513,18 @@
             }
         });
 
-        // Single question form
+        // ── Single Question Form ─────────────────────────────────────
+
         document.getElementById('single-form').addEventListener('submit', async (e) => {
             e.preventDefault();
+            if (!selectedFolderId && !document.getElementById('edit-question-id').value) {
+                showToast('Please select a folder first', 'warning');
+                return;
+            }
             try {
                 const editId = document.getElementById('edit-question-id').value;
                 const data = {
-                    testId: document.getElementById('single-test-select').value,
+                    folderId: selectedFolderId,
                     question: document.getElementById('single-question').value.trim(),
                     optionA: document.getElementById('single-a').value.trim(),
                     optionB: document.getElementById('single-b').value.trim(),
@@ -360,38 +536,66 @@
                 };
 
                 if (editId) {
+                    // Check if folder changed for count update
+                    const existingDoc = await getDoc(doc(db, 'questions', editId));
+                    const oldFolderId = existingDoc.exists() ? existingDoc.data().folderId : null;
+
                     await updateDoc(doc(db, 'questions', editId), data);
+
+                    if (oldFolderId && oldFolderId !== selectedFolderId) {
+                        await incrementQuestionCount(oldFolderId, -1);
+                        await incrementQuestionCount(selectedFolderId, 1);
+                    }
                     showToast('Question updated', 'success');
                 } else {
                     const ref = doc(collection(db, 'questions'));
                     await setDoc(ref, { ...data, createdBy: adminUser.uid, createdAt: serverTimestamp() });
+                    await incrementQuestionCount(selectedFolderId, 1);
                     showToast('Question added', 'success');
                 }
                 document.getElementById('single-form-section').classList.add('hidden');
                 document.getElementById('single-form').reset();
+                await refreshFolders();
                 await loadQuestions();
             } catch (err) {
                 showToast('Failed to save question', 'error');
+                console.error(err);
             }
         });
 
-        // Filters
-        document.getElementById('filter-test').addEventListener('change', loadQuestions);
+        // ── Filters ──────────────────────────────────────────────────
+
         document.getElementById('filter-difficulty').addEventListener('change', loadQuestions);
+        document.getElementById('include-subfolders').addEventListener('change', loadQuestions);
 
         async function loadQuestions() {
-            const filterTest = document.getElementById('filter-test').value;
+            updateBreadcrumb();
             const filterDiff = document.getElementById('filter-difficulty').value;
+            const includeSubfolders = document.getElementById('include-subfolders').checked;
 
             const snap = await getDocs(collection(db, 'questions'));
             const tbody = document.getElementById('questions-table');
             const emptyEl = document.getElementById('empty-questions');
 
+            // Determine which folder IDs to show
+            let visibleFolderIds = null;
+            if (selectedFolderId) {
+                if (includeSubfolders) {
+                    visibleFolderIds = new Set(getDescendantFolderIdsLocal(selectedFolderId, folders));
+                } else {
+                    visibleFolderIds = new Set([selectedFolderId]);
+                }
+            }
+
+            // Build folder name map
+            const folderMap = {};
+            folders.forEach(f => { folderMap[f.id] = f.name; });
+
             let questions = [];
             snap.forEach(d => {
                 const data = d.data();
                 if (!data.isActive) return;
-                if (filterTest && data.testId !== filterTest) return;
+                if (visibleFolderIds && !visibleFolderIds.has(data.folderId)) return;
                 if (filterDiff && data.difficulty !== filterDiff) return;
                 questions.push({ id: d.id, ...data });
             });
@@ -401,25 +605,22 @@
             if (questions.length === 0) {
                 tbody.innerHTML = '';
                 emptyEl.classList.remove('hidden');
-                emptyEl.innerHTML = emptyState('help_outline', 'No questions found', 'Upload a CSV or add questions manually');
+                emptyEl.innerHTML = emptyState('help_outline', 'No questions found', selectedFolderId ? 'Upload a CSV or add questions to this folder' : 'Select a folder and upload questions');
                 return;
             }
             emptyEl.classList.add('hidden');
-
-            const testMap = {};
-            tests.forEach(t => { testMap[t.id] = t.name; });
 
             tbody.innerHTML = questions.map(q => `
                 <tr class="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
                     <td class="p-4 text-[12px] text-slate-700">${q.question.length > 80 ? q.question.substring(0, 80) + '...' : q.question}</td>
                     <td class="p-4 text-[12px] font-bold text-slate-700">${q.correctAnswer}</td>
                     <td class="p-4">${difficultyBadge(q.difficulty)}</td>
-                    <td class="p-4 text-[11px] text-slate-500">${testMap[q.testId] || 'Unknown'}</td>
+                    <td class="p-4 text-[11px] text-slate-500">${folderMap[q.folderId] || 'Unknown'}</td>
                     <td class="p-4 text-right">
                         <button onclick="window.__editQ('${q.id}')" class="size-7 rounded-full hover:bg-slate-100 inline-flex items-center justify-center transition-colors" title="Edit">
                             <span class="material-symbols-outlined text-slate-400 text-[14px]">edit</span>
                         </button>
-                        <button onclick="window.__deleteQ('${q.id}')" class="size-7 rounded-full hover:bg-red-50 inline-flex items-center justify-center transition-colors" title="Delete">
+                        <button onclick="window.__deleteQ('${q.id}', '${q.folderId}')" class="size-7 rounded-full hover:bg-red-50 inline-flex items-center justify-center transition-colors" title="Delete">
                             <span class="material-symbols-outlined text-slate-400 hover:text-red-500 text-[14px]">delete</span>
                         </button>
                     </td>
@@ -428,13 +629,19 @@
         }
 
         window.__editQ = async (qId) => {
-            const { getDoc: gd, doc: d } = await import('https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js');
-            const snap = await gd(d(db, 'questions', qId));
+            const snap = await getDoc(doc(db, 'questions', qId));
             if (!snap.exists()) return;
             const q = snap.data();
+
+            // Select the folder this question belongs to
+            if (q.folderId) {
+                selectedFolderId = q.folderId;
+                renderTree();
+                updateBreadcrumb();
+            }
+
             document.getElementById('edit-question-id').value = qId;
             document.getElementById('single-form-title').textContent = 'Edit Question';
-            document.getElementById('single-test-select').value = q.testId;
             document.getElementById('single-difficulty').value = q.difficulty;
             document.getElementById('single-question').value = q.question;
             document.getElementById('single-a').value = q.optionA;
@@ -447,11 +654,13 @@
             document.getElementById('single-form-section').scrollIntoView({ behavior: 'smooth' });
         };
 
-        window.__deleteQ = (qId) => {
+        window.__deleteQ = (qId, folderId) => {
             showModal('Delete Question', 'Are you sure? This cannot be undone.', async () => {
                 try {
                     await updateDoc(doc(db, 'questions', qId), { isActive: false });
+                    if (folderId) await incrementQuestionCount(folderId, -1);
                     showToast('Question deleted', 'success');
+                    await refreshFolders();
                     await loadQuestions();
                 } catch (e) {
                     showToast('Failed to delete', 'error');

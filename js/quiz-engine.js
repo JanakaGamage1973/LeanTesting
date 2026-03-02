@@ -1,9 +1,56 @@
-import { collection, query, where, getDocs, doc, setDoc, updateDoc, serverTimestamp, Timestamp } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
+import { collection, query, where, getDocs, getDoc, doc, setDoc, updateDoc, serverTimestamp, Timestamp } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
 import { db } from './firebase-config.js';
+import { getDescendantFolderIds, chunkArray } from './folder-service.js';
 
 export async function selectQuestions(testId, testConfig) {
     const questionsRef = collection(db, 'questions');
 
+    // Use folder-based selection if test has a folderId, otherwise legacy testId path
+    if (testConfig.folderId) {
+        return selectQuestionsFromFolder(questionsRef, testConfig);
+    }
+    return selectQuestionsLegacy(questionsRef, testId, testConfig);
+}
+
+// New: folder-based question selection
+async function selectQuestionsFromFolder(questionsRef, testConfig) {
+    const folderIds = await getDescendantFolderIds(testConfig.folderId);
+    const folderChunks = chunkArray(folderIds, 30);
+
+    const [easyDocs, mediumDocs, hardDocs] = await Promise.all([
+        queryByDifficultyAcrossFolders(questionsRef, folderChunks, 'easy'),
+        queryByDifficultyAcrossFolders(questionsRef, folderChunks, 'medium'),
+        queryByDifficultyAcrossFolders(questionsRef, folderChunks, 'hard')
+    ]);
+
+    const selected = [
+        ...shuffleArray(easyDocs).slice(0, testConfig.easyCount || 12),
+        ...shuffleArray(mediumDocs).slice(0, testConfig.mediumCount || 9),
+        ...shuffleArray(hardDocs).slice(0, testConfig.hardCount || 9)
+    ].map(d => ({ id: d.id, ...d.data() }));
+
+    return shuffleArray(selected);
+}
+
+async function queryByDifficultyAcrossFolders(questionsRef, folderChunks, difficulty) {
+    const promises = folderChunks.map(chunk =>
+        getDocs(query(
+            questionsRef,
+            where('folderId', 'in', chunk),
+            where('difficulty', '==', difficulty),
+            where('isActive', '==', true)
+        ))
+    );
+    const snapshots = await Promise.all(promises);
+    const allDocs = [];
+    for (const snap of snapshots) {
+        allDocs.push(...snap.docs);
+    }
+    return allDocs;
+}
+
+// Legacy: testId-based question selection (backward compatibility)
+async function selectQuestionsLegacy(questionsRef, testId, testConfig) {
     const [easySnap, mediumSnap, hardSnap] = await Promise.all([
         getDocs(query(questionsRef, where('testId', '==', testId), where('difficulty', '==', 'easy'), where('isActive', '==', true))),
         getDocs(query(questionsRef, where('testId', '==', testId), where('difficulty', '==', 'medium'), where('isActive', '==', true))),

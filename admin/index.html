@@ -51,6 +51,7 @@
         import { renderAdminSidebar, renderHeader, initLogout, statCard, badge, emptyState } from '../js/ui.js';
         import { db } from '../js/firebase-config.js';
         import { collection, getDocs, query, orderBy, limit, where, doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
+        import { loadAllFolders, getDescendantFolderIdsLocal } from '../js/folder-service.js';
 
         initLogout();
 
@@ -82,9 +83,16 @@
                 ? Math.round(completedAttempts.reduce((s, a) => s + a.percentage, 0) / completedAttempts.length)
                 : 0;
 
+            // Count active questions
+            let activeQuestionCount = 0;
+            questionsSnap.forEach(d => { if (d.data().isActive) activeQuestionCount++; });
+
+            // Load folders for question counts
+            const allFolders = await loadAllFolders();
+
             document.getElementById('stats-grid').innerHTML = [
                 statCard('group', students.length, 'Students'),
-                statCard('help_outline', questionsSnap.size, 'Questions'),
+                statCard('help_outline', activeQuestionCount, 'Questions'),
                 statCard('quiz', testsSnap.size, 'Tests'),
                 statCard('percent', avgScore + '%', 'Avg Score')
             ].join('');
@@ -135,13 +143,24 @@
             if (testsSnap.empty) {
                 testOverview.innerHTML = emptyState('quiz', 'No tests created');
             } else {
-                // Count questions per test
-                const qCountByTest = {};
+                // Count questions per folder
+                const qCountByFolder = {};
                 questionsSnap.forEach(d => {
                     const data = d.data();
-                    if (!qCountByTest[data.testId]) qCountByTest[data.testId] = { easy: 0, medium: 0, hard: 0 };
-                    qCountByTest[data.testId][data.difficulty]++;
+                    if (!data.isActive) return;
+                    const key = data.folderId || data.testId;
+                    if (!qCountByFolder[key]) qCountByFolder[key] = 0;
+                    qCountByFolder[key]++;
                 });
+
+                // Helper: get total question count for a test's folder tree
+                function getTestQuestionCount(test) {
+                    if (test.folderId) {
+                        const ids = getDescendantFolderIdsLocal(test.folderId, allFolders);
+                        return ids.reduce((sum, id) => sum + (qCountByFolder[id] || 0), 0);
+                    }
+                    return qCountByFolder[test.testId] || 0;
+                }
 
                 // Count attempts per test
                 const aCountByTest = {};
@@ -150,9 +169,8 @@
                 });
 
                 testOverview.innerHTML = testsSnap.docs.map(d => {
-                    const test = d.data();
-                    const qc = qCountByTest[d.id] || { easy: 0, medium: 0, hard: 0 };
-                    const total = qc.easy + qc.medium + qc.hard;
+                    const test = { ...d.data(), testId: d.id };
+                    const total = getTestQuestionCount(test);
                     const ac = aCountByTest[d.id] || 0;
                     return `
                         <div class="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:shadow-sm transition-all">

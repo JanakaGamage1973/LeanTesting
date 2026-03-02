@@ -216,3 +216,153 @@ export function initLogout() {
 export function pageShell(sidebarHtml, headerHtml) {
     return { sidebarHtml, headerHtml };
 }
+
+// ── Context Menu ──────────────────────────────────────────────────
+
+export function showContextMenu(items, x, y) {
+    hideContextMenu();
+    const menu = document.createElement('div');
+    menu.id = 'context-menu';
+    menu.className = 'context-menu';
+
+    // Adjust position to stay within viewport
+    const menuWidth = 180;
+    const menuHeight = items.length * 40;
+    if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 8;
+    if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 8;
+
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+
+    menu.innerHTML = items.map((item, i) => {
+        if (item.divider) return '<div class="context-menu-divider"></div>';
+        return `
+            <div class="context-menu-item ${item.danger ? 'danger' : ''}" data-idx="${i}">
+                <span class="material-symbols-outlined text-[16px]">${item.icon}</span>
+                <span>${item.label}</span>
+            </div>`;
+    }).join('');
+
+    document.body.appendChild(menu);
+
+    menu.querySelectorAll('.context-menu-item').forEach(el => {
+        el.addEventListener('click', () => {
+            const idx = parseInt(el.dataset.idx);
+            hideContextMenu();
+            if (items[idx] && items[idx].action) items[idx].action();
+        });
+    });
+
+    // Close on outside click
+    setTimeout(() => {
+        document.addEventListener('click', hideContextMenu, { once: true });
+    }, 10);
+}
+
+export function hideContextMenu() {
+    const existing = document.getElementById('context-menu');
+    if (existing) existing.remove();
+}
+
+// ── Folder Picker Modal ───────────────────────────────────────────
+
+export function showFolderPickerModal(treeHtml, onClose) {
+    const existing = document.getElementById('folder-picker-modal');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'folder-picker-modal';
+    overlay.className = 'fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center opacity-0 transition-opacity duration-300';
+    overlay.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-xl max-w-md w-full mx-4 max-h-[70vh] flex flex-col transform scale-95 transition-transform duration-300" id="picker-modal-content">
+            <div class="flex items-center justify-between p-4 border-b border-slate-100">
+                <h3 class="text-sm font-bold text-slate-800">Select Question Folder</h3>
+                <button id="picker-close" class="size-8 rounded-full hover:bg-slate-100 flex items-center justify-center transition-colors">
+                    <span class="material-symbols-outlined text-slate-400 text-[18px]">close</span>
+                </button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-4" id="picker-tree-container">
+                ${treeHtml}
+            </div>
+            <div class="p-4 border-t border-slate-100 flex justify-end gap-3">
+                <button id="picker-cancel" class="border border-slate-200 text-slate-500 px-4 py-2 rounded-xl text-[11px] font-medium hover:bg-slate-50 transition-colors">Cancel</button>
+                <button id="picker-confirm" class="bg-primary text-white px-4 py-2 rounded-xl text-[11px] font-bold hover:bg-indigo-600 shadow-lg transition-colors">Select</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+
+    requestAnimationFrame(() => {
+        overlay.classList.remove('opacity-0');
+        overlay.classList.add('opacity-100');
+        document.getElementById('picker-modal-content').classList.remove('scale-95');
+    });
+
+    const close = () => {
+        overlay.classList.remove('opacity-100');
+        overlay.classList.add('opacity-0');
+        setTimeout(() => overlay.remove(), 300);
+        if (onClose) onClose();
+    };
+
+    document.getElementById('picker-close').onclick = close;
+    document.getElementById('picker-cancel').onclick = close;
+    overlay.onclick = (e) => { if (e.target === overlay) close(); };
+
+    return { close, overlay };
+}
+
+// ── Prompt Modal (for rename, etc.) ───────────────────────────────
+
+export function showPromptModal(title, placeholder, currentValue, onConfirm) {
+    const existing = document.getElementById('modal-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'modal-overlay';
+    overlay.className = 'fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center opacity-0 transition-opacity duration-300';
+    overlay.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-xl max-w-sm w-full mx-4 p-6 transform scale-95 transition-transform duration-300" id="modal-content">
+            <h3 class="text-sm font-bold text-slate-800 mb-4">${title}</h3>
+            <input type="text" id="prompt-input" value="${currentValue || ''}" placeholder="${placeholder}"
+                class="w-full border border-slate-200 rounded-xl px-3 py-2 text-[12px] focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none mb-4" />
+            <div class="flex justify-end gap-3">
+                <button id="modal-cancel" class="border border-slate-200 text-slate-500 px-4 py-2 rounded-xl text-[11px] font-medium hover:bg-slate-50 transition-colors">Cancel</button>
+                <button id="modal-confirm" class="bg-primary hover:bg-indigo-600 text-white px-4 py-2 rounded-xl text-[11px] font-bold shadow-lg transition-colors">OK</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+
+    requestAnimationFrame(() => {
+        overlay.classList.remove('opacity-0');
+        overlay.classList.add('opacity-100');
+        document.getElementById('modal-content').classList.remove('scale-95');
+        document.getElementById('prompt-input').focus();
+        document.getElementById('prompt-input').select();
+    });
+
+    const close = () => {
+        overlay.classList.remove('opacity-100');
+        overlay.classList.add('opacity-0');
+        setTimeout(() => overlay.remove(), 300);
+    };
+
+    document.getElementById('modal-cancel').onclick = close;
+    overlay.onclick = (e) => { if (e.target === overlay) close(); };
+    document.getElementById('modal-confirm').onclick = () => {
+        const value = document.getElementById('prompt-input').value.trim();
+        if (value) {
+            close();
+            onConfirm(value);
+        }
+    };
+    document.getElementById('prompt-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            const value = document.getElementById('prompt-input').value.trim();
+            if (value) {
+                close();
+                onConfirm(value);
+            }
+        }
+        if (e.key === 'Escape') close();
+    });
+}
