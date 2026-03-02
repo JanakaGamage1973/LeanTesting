@@ -29,11 +29,11 @@
             <div id="score-details" class="flex items-center justify-center gap-6 text-[11px] text-slate-500"></div>
         </div>
 
-        <!-- Difficulty Breakdown -->
+        <!-- Stats Summary -->
         <div class="grid grid-cols-3 gap-4 mb-6">
-            <div id="easy-breakdown" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5"></div>
-            <div id="medium-breakdown" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5"></div>
-            <div id="hard-breakdown" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5"></div>
+            <div id="stat-score" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 text-center"></div>
+            <div id="stat-time" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 text-center"></div>
+            <div id="stat-answered" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 text-center"></div>
         </div>
 
         <!-- Actions -->
@@ -61,10 +61,9 @@
 
     <script type="module">
         import { requireAuth, navigateTo, BASE_PATH } from './js/auth.js';
-        import { renderStudentHeader, initLogout, badge, difficultyBadge } from './js/ui.js';
+        import { renderStudentHeader, initLogout, badge } from './js/ui.js';
         import { db } from './js/firebase-config.js';
         import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
-        import { calculateBreakdown } from './js/quiz-engine.js';
 
         initLogout();
 
@@ -117,11 +116,31 @@
                 <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">check_circle</span> ${statusText}</span>
             `;
 
-            // Breakdown
-            const breakdown = calculateBreakdown(attempt.answers);
-            renderBreakdown('easy-breakdown', 'Easy', breakdown.easy, 'emerald');
-            renderBreakdown('medium-breakdown', 'Medium', breakdown.medium, 'amber');
-            renderBreakdown('hard-breakdown', 'Hard', breakdown.hard, 'red');
+            // Stats cards
+            const answeredCount = attempt.answers.filter(a => a.selectedAnswer).length;
+            const answeredPct = Math.round((answeredCount / attempt.totalQuestions) * 100);
+
+            document.getElementById('stat-score').innerHTML = `
+                <div class="size-10 rounded-full mx-auto mb-2 flex items-center justify-center ${iconBg}">
+                    <span class="material-symbols-outlined ${iconColor} text-[20px]">percent</span>
+                </div>
+                <div class="text-xl font-bold ${scoreColor}">${pct}%</div>
+                <div class="text-[10px] text-slate-400 font-medium mt-1">Score</div>
+            `;
+            document.getElementById('stat-time').innerHTML = `
+                <div class="size-10 rounded-full mx-auto mb-2 flex items-center justify-center bg-blue-50">
+                    <span class="material-symbols-outlined text-blue-500 text-[20px]">timer</span>
+                </div>
+                <div class="text-xl font-bold text-slate-800">${minutes}m ${seconds}s</div>
+                <div class="text-[10px] text-slate-400 font-medium mt-1">Time Taken</div>
+            `;
+            document.getElementById('stat-answered').innerHTML = `
+                <div class="size-10 rounded-full mx-auto mb-2 flex items-center justify-center ${answeredPct === 100 ? 'bg-emerald-50' : 'bg-amber-50'}">
+                    <span class="material-symbols-outlined ${answeredPct === 100 ? 'text-emerald-500' : 'text-amber-500'} text-[20px]">edit_note</span>
+                </div>
+                <div class="text-xl font-bold text-slate-800">${answeredCount}/${attempt.totalQuestions}</div>
+                <div class="text-[10px] text-slate-400 font-medium mt-1">Questions Answered</div>
+            `;
 
             // Question Review
             document.getElementById('question-review').innerHTML = attempt.answers.map((a, i) => {
@@ -135,7 +154,6 @@
                     <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 relative overflow-hidden">
                         <div class="status-bar ${a.isCorrect ? 'bg-emerald-500' : 'bg-red-500'}"></div>
                         <div class="flex items-center gap-2 mb-3 pl-2">
-                            ${difficultyBadge(a.difficulty)}
                             <span class="text-[10px] text-slate-400 font-medium">Question ${i + 1}</span>
                             ${a.isCorrect
                                 ? '<span class="ml-auto px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-700">CORRECT</span>'
@@ -164,18 +182,6 @@
             console.error(e);
         }
 
-        function renderBreakdown(elId, label, data, color) {
-            const pct = data.total > 0 ? Math.round((data.correct / data.total) * 100) : 0;
-            const colors = { emerald: 'bg-emerald-500', amber: 'bg-amber-500', red: 'bg-red-500' };
-            document.getElementById(elId).innerHTML = `
-                <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">${label}</div>
-                <div class="text-xl font-bold text-slate-800">${data.correct}/${data.total}</div>
-                <div class="progress-bar mt-2">
-                    <div class="progress-bar-fill ${colors[color]}" style="width: ${pct}%"></div>
-                </div>
-                <div class="text-[10px] text-slate-400 mt-1">${pct}%</div>
-            `;
-        }
     </script>
 </body>
 </html>
