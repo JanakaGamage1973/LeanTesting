@@ -56,7 +56,7 @@
         <div id="error-state" class="hidden text-center py-12">
             <span class="material-symbols-outlined text-red-300 text-4xl mb-2">error</span>
             <p class="text-sm font-medium text-slate-500 mb-1">Failed to load results</p>
-            <p id="error-detail" class="text-[11px] text-red-400 mb-4"></p>
+            <p id="error-detail" class="text-[11px] text-red-400 mb-4 max-w-lg mx-auto break-words"></p>
             <a id="error-back" href="#" class="text-[12px] text-primary font-medium hover:underline">Go to Dashboard</a>
         </div>
 
@@ -67,157 +67,151 @@
         <div id="question-review" class="space-y-4"></div>
     </main>
 
-    <!-- Non-module error detector (runs before module script) -->
     <script>
-        window.__moduleLoaded = false;
-        setTimeout(function() {
-            if (!window.__moduleLoaded) {
-                var el = document.getElementById('error-state');
-                var det = document.getElementById('error-detail');
-                if (el) el.classList.remove('hidden');
-                if (det) det.textContent = 'Module script failed to load. Please open browser console (F12) to see the error.';
+        // Use dynamic imports to catch module loading errors
+        (async function() {
+            function showError(msg) {
+                document.getElementById('error-state').classList.remove('hidden');
+                document.getElementById('error-detail').textContent = msg;
             }
-        }, 8000);
-    </script>
 
-    <script type="module">
-        import { requireAuth, navigateTo, BASE_PATH } from './js/auth.js';
-        import { renderStudentHeader, initLogout, badge } from './js/ui.js';
-        import { db } from './js/firebase-config.js';
-        import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
+            try {
+                // Step 1: Load modules with dynamic imports to catch errors
+                const [authModule, uiModule, configModule, firestoreModule] = await Promise.all([
+                    import('./js/auth.js'),
+                    import('./js/ui.js'),
+                    import('./js/firebase-config.js'),
+                    import('https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js')
+                ]);
 
-        window.__moduleLoaded = true;
-        initLogout();
+                const { requireAuth, navigateTo, BASE_PATH } = authModule;
+                const { renderStudentHeader, initLogout, badge } = uiModule;
+                const { db } = configModule;
+                const { doc, getDoc } = firestoreModule;
 
-        const params = new URLSearchParams(window.location.search);
-        const attemptId = params.get('attemptId');
-        if (!attemptId) { navigateTo('/dashboard.html'); throw new Error('stop'); }
+                initLogout();
 
-        function showError(msg) {
-            document.getElementById('error-state').classList.remove('hidden');
-            document.getElementById('error-detail').textContent = msg;
-            document.getElementById('error-back').href = `${BASE_PATH}/dashboard.html`;
-        }
+                const params = new URLSearchParams(window.location.search);
+                const attemptId = params.get('attemptId');
+                if (!attemptId) { navigateTo('/dashboard.html'); return; }
 
-        try {
-            const user = await requireAuth();
-            document.getElementById('header').innerHTML = renderStudentHeader(user);
+                document.getElementById('error-back').href = BASE_PATH + '/dashboard.html';
 
-            const attemptDoc = await getDoc(doc(db, 'attempts', attemptId));
-            if (!attemptDoc.exists()) { navigateTo('/dashboard.html'); return; }
-            const attempt = attemptDoc.data();
+                const user = await requireAuth();
+                document.getElementById('header').innerHTML = renderStudentHeader(user);
 
-            // Fetch test name
-            const testDoc = attempt.testId ? await getDoc(doc(db, 'tests', attempt.testId)) : null;
-            const testName = testDoc && testDoc.exists() ? testDoc.data().name : 'Test';
+                const attemptDoc = await getDoc(doc(db, 'attempts', attemptId));
+                if (!attemptDoc.exists()) { navigateTo('/dashboard.html'); return; }
+                const attempt = attemptDoc.data();
 
-            // Links
-            document.getElementById('retake-link').href = `${BASE_PATH}/quiz.html?testId=${attempt.testId}`;
-            document.getElementById('progress-link').href = `${BASE_PATH}/progress.html`;
-            document.getElementById('dashboard-link').href = `${BASE_PATH}/dashboard.html`;
+                // Fetch test name
+                const testDoc = attempt.testId ? await getDoc(doc(db, 'tests', attempt.testId)) : null;
+                const testName = testDoc && testDoc.exists() ? testDoc.data().name : 'Test';
 
-            // Score
-            const pct = attempt.percentage || 0;
-            const passed = pct >= 70;
-            const scoreColor = pct >= 70 ? 'text-emerald-600' : pct >= 50 ? 'text-amber-600' : 'text-red-600';
-            const iconBg = pct >= 70 ? 'bg-emerald-50' : pct >= 50 ? 'bg-amber-50' : 'bg-red-50';
-            const icon = pct >= 70 ? 'emoji_events' : pct >= 50 ? 'thumb_up' : 'trending_down';
-            const iconColor = pct >= 70 ? 'text-emerald-500' : pct >= 50 ? 'text-amber-500' : 'text-red-500';
+                // Links
+                document.getElementById('retake-link').href = BASE_PATH + '/quiz.html?testId=' + attempt.testId;
+                document.getElementById('progress-link').href = BASE_PATH + '/progress.html';
+                document.getElementById('dashboard-link').href = BASE_PATH + '/dashboard.html';
 
-            document.getElementById('score-icon').className = `size-20 rounded-full mx-auto mb-4 flex items-center justify-center ${iconBg}`;
-            document.getElementById('score-icon').innerHTML = `<span class="material-symbols-outlined ${iconColor} text-[40px]">${icon}</span>`;
-            document.getElementById('score-percentage').className = `text-4xl font-bold mb-1 ${scoreColor}`;
-            document.getElementById('score-percentage').textContent = `${pct}%`;
-            document.getElementById('score-fraction').textContent = `${attempt.score || 0} out of ${attempt.totalQuestions || 0} correct`;
-            document.getElementById('score-badge').innerHTML = badge(
-                passed ? 'Passed' : 'Needs Improvement',
-                passed ? 'emerald' : 'red'
-            );
+                // Score
+                const pct = attempt.percentage || 0;
+                const passed = pct >= 70;
+                const scoreColor = pct >= 70 ? 'text-emerald-600' : pct >= 50 ? 'text-amber-600' : 'text-red-600';
+                const iconBg = pct >= 70 ? 'bg-emerald-50' : pct >= 50 ? 'bg-amber-50' : 'bg-red-50';
+                const icon = pct >= 70 ? 'emoji_events' : pct >= 50 ? 'thumb_up' : 'trending_down';
+                const iconColor = pct >= 70 ? 'text-emerald-500' : pct >= 50 ? 'text-amber-500' : 'text-red-500';
 
-            const timeTaken = attempt.timeTaken || 0;
-            const minutes = Math.floor(timeTaken / 60);
-            const seconds = timeTaken % 60;
-            const statusText = attempt.status === 'timed_out' ? 'Time expired' : 'Completed';
+                document.getElementById('score-icon').className = 'size-20 rounded-full mx-auto mb-4 flex items-center justify-center ' + iconBg;
+                document.getElementById('score-icon').innerHTML = '<span class="material-symbols-outlined ' + iconColor + ' text-[40px]">' + icon + '</span>';
+                document.getElementById('score-percentage').className = 'text-4xl font-bold mb-1 ' + scoreColor;
+                document.getElementById('score-percentage').textContent = pct + '%';
+                document.getElementById('score-fraction').textContent = (attempt.score || 0) + ' out of ' + (attempt.totalQuestions || 0) + ' correct';
+                document.getElementById('score-badge').innerHTML = badge(
+                    passed ? 'Passed' : 'Needs Improvement',
+                    passed ? 'emerald' : 'red'
+                );
 
-            document.getElementById('score-details').innerHTML = `
-                <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">timer</span> ${minutes}m ${seconds}s</span>
-                <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">quiz</span> ${testName}</span>
-                <span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">check_circle</span> ${statusText}</span>
-            `;
+                const timeTaken = attempt.timeTaken || 0;
+                const minutes = Math.floor(timeTaken / 60);
+                const seconds = timeTaken % 60;
+                const statusText = attempt.status === 'timed_out' ? 'Time expired' : 'Completed';
 
-            // Stats cards
-            const answers = attempt.answers || [];
-            const totalQ = attempt.totalQuestions || answers.length || 0;
-            const answeredCount = answers.filter(a => a.selectedAnswer).length;
-            const answeredPct = totalQ > 0 ? Math.round((answeredCount / totalQ) * 100) : 0;
+                document.getElementById('score-details').innerHTML =
+                    '<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">timer</span> ' + minutes + 'm ' + seconds + 's</span>' +
+                    '<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">quiz</span> ' + testName + '</span>' +
+                    '<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">check_circle</span> ' + statusText + '</span>';
 
-            document.getElementById('stat-score').innerHTML = `
-                <div class="size-10 rounded-full mx-auto mb-2 flex items-center justify-center ${iconBg}">
-                    <span class="material-symbols-outlined ${iconColor} text-[20px]">percent</span>
-                </div>
-                <div class="text-xl font-bold ${scoreColor}">${pct}%</div>
-                <div class="text-[10px] text-slate-400 font-medium mt-1">Score</div>
-            `;
-            document.getElementById('stat-time').innerHTML = `
-                <div class="size-10 rounded-full mx-auto mb-2 flex items-center justify-center bg-blue-50">
-                    <span class="material-symbols-outlined text-blue-500 text-[20px]">timer</span>
-                </div>
-                <div class="text-xl font-bold text-slate-800">${minutes}m ${seconds}s</div>
-                <div class="text-[10px] text-slate-400 font-medium mt-1">Time Taken</div>
-            `;
-            document.getElementById('stat-answered').innerHTML = `
-                <div class="size-10 rounded-full mx-auto mb-2 flex items-center justify-center ${answeredPct === 100 ? 'bg-emerald-50' : 'bg-amber-50'}">
-                    <span class="material-symbols-outlined ${answeredPct === 100 ? 'text-emerald-500' : 'text-amber-500'} text-[20px]">edit_note</span>
-                </div>
-                <div class="text-xl font-bold text-slate-800">${answeredCount}/${totalQ}</div>
-                <div class="text-[10px] text-slate-400 font-medium mt-1">Questions Answered</div>
-            `;
+                // Stats cards
+                const answers = attempt.answers || [];
+                const totalQ = attempt.totalQuestions || answers.length || 0;
+                const answeredCount = answers.filter(function(a) { return a.selectedAnswer; }).length;
+                const answeredPct = totalQ > 0 ? Math.round((answeredCount / totalQ) * 100) : 0;
 
-            // Question Review
-            if (answers.length > 0) {
-                document.getElementById('question-review').innerHTML = answers.map((a, i) => {
-                    const options = [
-                        { letter: 'A', text: a.optionA || '' },
-                        { letter: 'B', text: a.optionB || '' },
-                        { letter: 'C', text: a.optionC || '' },
-                        { letter: 'D', text: a.optionD || '' }
-                    ];
-                    return `
-                        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 relative overflow-hidden">
-                            <div class="status-bar ${a.isCorrect ? 'bg-emerald-500' : 'bg-red-500'}"></div>
-                            <div class="flex items-center gap-2 mb-3 pl-2">
-                                <span class="text-[10px] text-slate-400 font-medium">Question ${i + 1}</span>
-                                ${a.isCorrect
+                document.getElementById('stat-score').innerHTML =
+                    '<div class="size-10 rounded-full mx-auto mb-2 flex items-center justify-center ' + iconBg + '">' +
+                        '<span class="material-symbols-outlined ' + iconColor + ' text-[20px]">percent</span>' +
+                    '</div>' +
+                    '<div class="text-xl font-bold ' + scoreColor + '">' + pct + '%</div>' +
+                    '<div class="text-[10px] text-slate-400 font-medium mt-1">Score</div>';
+
+                document.getElementById('stat-time').innerHTML =
+                    '<div class="size-10 rounded-full mx-auto mb-2 flex items-center justify-center bg-blue-50">' +
+                        '<span class="material-symbols-outlined text-blue-500 text-[20px]">timer</span>' +
+                    '</div>' +
+                    '<div class="text-xl font-bold text-slate-800">' + minutes + 'm ' + seconds + 's</div>' +
+                    '<div class="text-[10px] text-slate-400 font-medium mt-1">Time Taken</div>';
+
+                document.getElementById('stat-answered').innerHTML =
+                    '<div class="size-10 rounded-full mx-auto mb-2 flex items-center justify-center ' + (answeredPct === 100 ? 'bg-emerald-50' : 'bg-amber-50') + '">' +
+                        '<span class="material-symbols-outlined ' + (answeredPct === 100 ? 'text-emerald-500' : 'text-amber-500') + ' text-[20px]">edit_note</span>' +
+                    '</div>' +
+                    '<div class="text-xl font-bold text-slate-800">' + answeredCount + '/' + totalQ + '</div>' +
+                    '<div class="text-[10px] text-slate-400 font-medium mt-1">Questions Answered</div>';
+
+                // Question Review
+                if (answers.length > 0) {
+                    document.getElementById('question-review').innerHTML = answers.map(function(a, i) {
+                        var options = [
+                            { letter: 'A', text: a.optionA || '' },
+                            { letter: 'B', text: a.optionB || '' },
+                            { letter: 'C', text: a.optionC || '' },
+                            { letter: 'D', text: a.optionD || '' }
+                        ];
+                        return '<div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 relative overflow-hidden">' +
+                            '<div class="status-bar ' + (a.isCorrect ? 'bg-emerald-500' : 'bg-red-500') + '"></div>' +
+                            '<div class="flex items-center gap-2 mb-3 pl-2">' +
+                                '<span class="text-[10px] text-slate-400 font-medium">Question ' + (i + 1) + '</span>' +
+                                (a.isCorrect
                                     ? '<span class="ml-auto px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-700">CORRECT</span>'
-                                    : '<span class="ml-auto px-2 py-0.5 rounded-full text-[9px] font-bold bg-red-50 text-red-600">INCORRECT</span>'}
-                            </div>
-                            <p class="text-[12px] font-bold text-slate-800 mb-4 pl-2">${a.questionText || 'Question text not available'}</p>
-                            <div class="space-y-2 pl-2">
-                                ${options.map(o => {
-                                    const isCorrect = o.letter === a.correctAnswer;
-                                    const isSelected = o.letter === a.selectedAnswer;
-                                    let cls = 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-[12px] ';
+                                    : '<span class="ml-auto px-2 py-0.5 rounded-full text-[9px] font-bold bg-red-50 text-red-600">INCORRECT</span>') +
+                            '</div>' +
+                            '<p class="text-[12px] font-bold text-slate-800 mb-4 pl-2">' + (a.questionText || 'Question text not available') + '</p>' +
+                            '<div class="space-y-2 pl-2">' +
+                                options.map(function(o) {
+                                    var isCorrect = o.letter === a.correctAnswer;
+                                    var isSelected = o.letter === a.selectedAnswer;
+                                    var cls = 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-[12px] ';
                                     if (isCorrect) cls += 'bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200';
                                     else if (isSelected && !isCorrect) cls += 'bg-red-50 text-red-600 font-semibold border border-red-200';
                                     else cls += 'text-slate-500 bg-slate-50 border border-transparent';
-                                    const icon = isCorrect ? '<span class="material-symbols-outlined text-emerald-500 text-[16px]">check_circle</span>'
+                                    var iconHtml = isCorrect ? '<span class="material-symbols-outlined text-emerald-500 text-[16px]">check_circle</span>'
                                         : isSelected ? '<span class="material-symbols-outlined text-red-500 text-[16px]">cancel</span>'
                                         : '<span class="size-4"></span>';
-                                    return `<div class="${cls}">${icon}<span class="font-bold text-[11px] w-5">${o.letter}.</span>${o.text}</div>`;
-                                }).join('')}
-                            </div>
-                            ${!a.selectedAnswer ? '<p class="text-[10px] text-slate-400 mt-2 pl-2 italic">Not answered</p>' : ''}
-                        </div>`;
-                }).join('');
-            } else {
-                document.getElementById('question-review').innerHTML = '<p class="text-[12px] text-slate-400 text-center py-4">No question data available for this attempt.</p>';
+                                    return '<div class="' + cls + '">' + iconHtml + '<span class="font-bold text-[11px] w-5">' + o.letter + '.</span>' + o.text + '</div>';
+                                }).join('') +
+                            '</div>' +
+                            (!a.selectedAnswer ? '<p class="text-[10px] text-slate-400 mt-2 pl-2 italic">Not answered</p>' : '') +
+                        '</div>';
+                    }).join('');
+                } else {
+                    document.getElementById('question-review').innerHTML = '<p class="text-[12px] text-slate-400 text-center py-4">No question data available for this attempt.</p>';
+                }
+
+            } catch (e) {
+                console.error('Results page error:', e);
+                showError(e.message || String(e));
             }
-
-        } catch (e) {
-            console.error('Results page error:', e);
-            showError(e.message || String(e));
-        }
-
+        })();
     </script>
 </body>
 </html>
