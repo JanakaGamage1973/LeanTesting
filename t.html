@@ -87,36 +87,56 @@
         <p class="text-[11px] text-slate-400 mt-1">This link may be invalid or the test has been deactivated.</p>
     </div>
 
-    <script type="module">
-        import { login, navigateTo, BASE_PATH } from './js/auth.js';
-        import { auth, db } from './js/firebase-config.js';
-        import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-auth.js';
-        import { collection, query, where, getDocs, doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
+    <script>
+        (async function() {
+            try {
+                var [authModule, configModule, firebaseAuthModule, firestoreModule] = await Promise.all([
+                    import('./js/auth.js'),
+                    import('./js/firebase-config.js'),
+                    import('https://www.gstatic.com/firebasejs/11.3.0/firebase-auth.js'),
+                    import('https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js')
+                ]);
 
-        const params = new URLSearchParams(window.location.search);
-        const shareCode = params.get('code');
+                var login = authModule.login;
+                var navigateTo = authModule.navigateTo;
+                var BASE_PATH = authModule.BASE_PATH;
+                var auth = configModule.auth;
+                var db = configModule.db;
+                var onAuthStateChanged = firebaseAuthModule.onAuthStateChanged;
+                var collection = firestoreModule.collection;
+                var query = firestoreModule.query;
+                var where = firestoreModule.where;
+                var getDocs = firestoreModule.getDocs;
+                var doc = firestoreModule.doc;
+                var getDoc = firestoreModule.getDoc;
 
-        if (!shareCode) {
-            document.getElementById('loading').classList.add('hidden');
-            document.getElementById('not-found').classList.remove('hidden');
-        }
+                var params = new URLSearchParams(window.location.search);
+                var shareCode = params.get('code');
 
-        let testId = null;
-        let testData = null;
+                if (!shareCode) {
+                    document.getElementById('loading').classList.add('hidden');
+                    document.getElementById('not-found').classList.remove('hidden');
+                    return;
+                }
 
-        // Look up test by share code
-        try {
-            const testsSnap = await getDocs(query(
-                collection(db, 'tests'),
-                where('shareCode', '==', shareCode),
-                where('isActive', '==', true)
-            ));
+                var testId = null;
+                var testData = null;
+                var hasNavigated = false;
 
-            if (testsSnap.empty) {
-                document.getElementById('loading').classList.add('hidden');
-                document.getElementById('not-found').classList.remove('hidden');
-            } else {
-                const testDoc = testsSnap.docs[0];
+                // Look up test by share code
+                var testsSnap = await getDocs(query(
+                    collection(db, 'tests'),
+                    where('shareCode', '==', shareCode),
+                    where('isActive', '==', true)
+                ));
+
+                if (testsSnap.empty) {
+                    document.getElementById('loading').classList.add('hidden');
+                    document.getElementById('not-found').classList.remove('hidden');
+                    return;
+                }
+
+                var testDoc = testsSnap.docs[0];
                 testId = testDoc.id;
                 testData = testDoc.data();
 
@@ -127,52 +147,66 @@
 
                 document.getElementById('loading').classList.add('hidden');
 
-                // Check if already logged in
-                onAuthStateChanged(auth, async (user) => {
+                // Check if already logged in — use unsubscribe to prevent double navigation
+                var unsubscribe = onAuthStateChanged(auth, function(user) {
+                    // Immediately unsubscribe so this only fires ONCE
+                    unsubscribe();
+
+                    if (hasNavigated) return;
+
                     if (user) {
-                        const userDoc = await getDoc(doc(db, 'users', user.uid));
-                        if (userDoc.exists()) {
-                            // Already logged in, go directly to quiz
-                            navigateTo(`/quiz.html?testId=${testId}`);
-                            return;
-                        }
+                        getDoc(doc(db, 'users', user.uid)).then(function(userDoc) {
+                            if (hasNavigated) return;
+                            if (userDoc.exists()) {
+                                hasNavigated = true;
+                                navigateTo('/quiz.html?testId=' + testId);
+                            } else {
+                                document.getElementById('test-card').classList.remove('hidden');
+                            }
+                        });
+                    } else {
+                        document.getElementById('test-card').classList.remove('hidden');
                     }
-                    // Show login form
-                    document.getElementById('test-card').classList.remove('hidden');
                 });
+
+                // Login form
+                var form = document.getElementById('login-form');
+                var errorMsg = document.getElementById('error-msg');
+                var loginBtn = document.getElementById('login-btn');
+
+                form.addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    if (hasNavigated) return;
+
+                    errorMsg.classList.add('hidden');
+                    loginBtn.disabled = true;
+                    loginBtn.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">progress_activity</span><span>Signing in...</span>';
+
+                    try {
+                        var username = document.getElementById('username').value;
+                        var password = document.getElementById('password').value;
+                        await login(username, password);
+                        hasNavigated = true;
+                        navigateTo('/quiz.html?testId=' + testId);
+                    } catch (err) {
+                        console.error('Login error:', err);
+                        var msg = 'Invalid username or password';
+                        if (err.code === 'auth/too-many-requests') msg = 'Too many attempts. Please try again later.';
+                        errorMsg.textContent = msg;
+                        errorMsg.classList.remove('hidden');
+                        loginBtn.disabled = false;
+                        loginBtn.innerHTML = '<span>Sign In & Start Test</span><span class="material-symbols-outlined text-[16px]">arrow_forward</span>';
+                    }
+                });
+
+            } catch (e) {
+                console.error('Share link error:', e);
+                document.getElementById('loading').innerHTML =
+                    '<span class="material-symbols-outlined text-red-300 text-4xl mb-2">error</span>' +
+                    '<p class="text-sm font-medium text-slate-500 mb-1">Failed to load</p>' +
+                    '<p class="text-[11px] text-red-400">' + (e.message || String(e)) + '</p>';
             }
-        } catch (e) {
-            console.error('Error loading test:', e);
-            document.getElementById('loading').classList.add('hidden');
-            document.getElementById('not-found').classList.remove('hidden');
-        }
-
-        // Login form
-        const form = document.getElementById('login-form');
-        const errorMsg = document.getElementById('error-msg');
-        const loginBtn = document.getElementById('login-btn');
-
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            errorMsg.classList.add('hidden');
-            loginBtn.disabled = true;
-            loginBtn.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">progress_activity</span><span>Signing in...</span>';
-
-            try {
-                const username = document.getElementById('username').value;
-                const password = document.getElementById('password').value;
-                await login(username, password);
-                navigateTo(`/quiz.html?testId=${testId}`);
-            } catch (err) {
-                console.error('Login error:', err);
-                let msg = 'Invalid username or password';
-                if (err.code === 'auth/too-many-requests') msg = 'Too many attempts. Please try again later.';
-                errorMsg.textContent = msg;
-                errorMsg.classList.remove('hidden');
-                loginBtn.disabled = false;
-                loginBtn.innerHTML = '<span>Sign In & Start Test</span><span class="material-symbols-outlined text-[16px]">arrow_forward</span>';
-            }
-        });
+        })();
     </script>
 </body>
 </html>

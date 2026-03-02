@@ -98,11 +98,13 @@
             }
 
             try {
+                // Cache-bust quiz-engine.js to ensure latest question selection logic
+                var cacheBust = '?t=' + Date.now();
                 var [authModule, configModule, firestoreModule, quizModule, uiModule] = await Promise.all([
                     import('./js/auth.js'),
                     import('./js/firebase-config.js'),
                     import('https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js'),
-                    import('./js/quiz-engine.js'),
+                    import('./js/quiz-engine.js' + cacheBust),
                     import('./js/ui.js')
                 ]);
 
