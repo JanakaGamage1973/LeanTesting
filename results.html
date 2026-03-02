@@ -67,12 +67,26 @@
         <div id="question-review" class="space-y-4"></div>
     </main>
 
+    <!-- Non-module error detector (runs before module script) -->
+    <script>
+        window.__moduleLoaded = false;
+        setTimeout(function() {
+            if (!window.__moduleLoaded) {
+                var el = document.getElementById('error-state');
+                var det = document.getElementById('error-detail');
+                if (el) el.classList.remove('hidden');
+                if (det) det.textContent = 'Module script failed to load. Please open browser console (F12) to see the error.';
+            }
+        }, 8000);
+    </script>
+
     <script type="module">
         import { requireAuth, navigateTo, BASE_PATH } from './js/auth.js';
         import { renderStudentHeader, initLogout, badge } from './js/ui.js';
         import { db } from './js/firebase-config.js';
         import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
 
+        window.__moduleLoaded = true;
         initLogout();
 
         const params = new URLSearchParams(window.location.search);
