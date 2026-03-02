@@ -52,7 +52,6 @@
         <!-- Question Card -->
         <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-6">
             <div class="flex items-center gap-2 mb-4">
-                <span id="difficulty-badge"></span>
                 <span id="question-number" class="text-[10px] text-slate-400 font-medium"></span>
             </div>
             <h2 id="question-text" class="text-sm font-bold text-slate-800 leading-relaxed mb-6"></h2>
@@ -94,7 +93,7 @@
         import { db } from './js/firebase-config.js';
         import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
         import { selectQuestions, QuizTimer, createAttempt, submitAttempt, saveQuizState, loadQuizState, clearQuizState } from './js/quiz-engine.js';
-        import { showToast, showModal, difficultyBadge } from './js/ui.js';
+        import { showToast, showModal } from './js/ui.js';
 
         const params = new URLSearchParams(window.location.search);
         const testId = params.get('testId');
@@ -182,7 +181,6 @@
 
             document.getElementById('question-counter').textContent = `Question ${currentIndex + 1} of ${questions.length}`;
             document.getElementById('question-number').textContent = `Question ${currentIndex + 1}`;
-            document.getElementById('difficulty-badge').innerHTML = difficultyBadge(q.difficulty);
             document.getElementById('question-text').textContent = q.question;
 
             const options = ['A', 'B', 'C', 'D'];
