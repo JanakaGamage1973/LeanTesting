@@ -89,7 +89,7 @@
         import { requireAdmin, BASE_PATH } from '../js/auth.js';
         import { renderAdminSidebar, renderHeader, initLogout, statCard, badge, emptyState, showModal, showToast } from '../js/ui.js';
         import { db } from '../js/firebase-config.js';
-        import { collection, getDocs, doc, deleteDoc, writeBatch } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
+        import { collection, getDocs, query, where, doc, deleteDoc, writeBatch } from 'https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js';
 
         initLogout();
         let allAttempts = [], orphanedAttempts = [], userMap = {}, testMap = {};
@@ -99,23 +99,20 @@
             document.getElementById('sidebar').innerHTML = renderAdminSidebar('results');
             document.getElementById('header').innerHTML = renderHeader(user, 'Admin / Results');
 
-            // Load all data
-            const [usersSnap, testsSnap, attemptsSnap] = await Promise.all([
+            // Load all data — use filtered queries for better Firestore performance
+            const [usersSnap, testsSnap, completedSnap, timedOutSnap, inProgressSnap] = await Promise.all([
                 getDocs(collection(db, 'users')),
                 getDocs(collection(db, 'tests')),
-                getDocs(collection(db, 'attempts'))
+                getDocs(query(collection(db, 'attempts'), where('status', '==', 'completed'))),
+                getDocs(query(collection(db, 'attempts'), where('status', '==', 'timed_out'))),
+                getDocs(query(collection(db, 'attempts'), where('status', '==', 'in_progress')))
             ]);
 
             usersSnap.forEach(d => { userMap[d.id] = d.data(); });
             testsSnap.forEach(d => { testMap[d.id] = d.data(); });
-            attemptsSnap.forEach(d => {
-                const data = d.data();
-                if (data.status === 'in_progress') {
-                    orphanedAttempts.push({ id: d.id, ...data });
-                } else {
-                    allAttempts.push({ id: d.id, ...data });
-                }
-            });
+            completedSnap.forEach(d => { allAttempts.push({ id: d.id, ...d.data() }); });
+            timedOutSnap.forEach(d => { allAttempts.push({ id: d.id, ...d.data() }); });
+            inProgressSnap.forEach(d => { orphanedAttempts.push({ id: d.id, ...d.data() }); });
 
             // Show orphaned count
             if (orphanedAttempts.length > 0) {

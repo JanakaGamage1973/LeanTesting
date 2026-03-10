@@ -65,30 +65,27 @@
             document.getElementById('all-results-link').href = `${BASE_PATH}/admin/results.html`;
             document.getElementById('all-tests-link').href = `${BASE_PATH}/admin/tests.html`;
 
-            // Fetch counts
-            const [usersSnap, questionsSnap, testsSnap, attemptsSnap] = await Promise.all([
+            // Fetch counts — filter server-side to reduce data transfer
+            const [usersSnap, questionsSnap, testsSnap, completedSnap, timedOutSnap] = await Promise.all([
                 getDocs(collection(db, 'users')),
-                getDocs(collection(db, 'questions')),
+                getDocs(query(collection(db, 'questions'), where('isActive', '==', true))),
                 getDocs(collection(db, 'tests')),
-                getDocs(collection(db, 'attempts'))
+                getDocs(query(collection(db, 'attempts'), where('status', '==', 'completed'))),
+                getDocs(query(collection(db, 'attempts'), where('status', '==', 'timed_out')))
             ]);
 
             const students = [];
             usersSnap.forEach(d => { if (d.data().role === 'student') students.push(d.data()); });
 
             const completedAttempts = [];
-            attemptsSnap.forEach(d => {
-                const data = d.data();
-                if (data.status !== 'in_progress') completedAttempts.push({ id: d.id, ...data });
-            });
+            completedSnap.forEach(d => { completedAttempts.push({ id: d.id, ...d.data() }); });
+            timedOutSnap.forEach(d => { completedAttempts.push({ id: d.id, ...d.data() }); });
 
             const avgScore = completedAttempts.length > 0
                 ? Math.round(completedAttempts.reduce((s, a) => s + a.percentage, 0) / completedAttempts.length)
                 : 0;
 
-            // Count active questions
-            let activeQuestionCount = 0;
-            questionsSnap.forEach(d => { if (d.data().isActive) activeQuestionCount++; });
+            const activeQuestionCount = questionsSnap.size;
 
             // Load folders for question counts
             const allFolders = await loadAllFolders();
@@ -150,7 +147,6 @@
                 const qCountByFolder = {};
                 questionsSnap.forEach(d => {
                     const data = d.data();
-                    if (!data.isActive) return;
                     const key = data.folderId || data.testId;
                     if (!qCountByFolder[key]) qCountByFolder[key] = 0;
                     qCountByFolder[key]++;

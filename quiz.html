@@ -160,25 +160,21 @@
                 var resumedTimer = null;
 
                 // ─── Layer 1: Resume existing in-progress attempt ───
-                // If the page reloads for any reason, this picks up the existing attempt
-                // instead of creating a new one with potentially fewer questions
-                console.log('[Quiz] Checking for existing in-progress attempt...');
-                var userAttemptsSnap = await getDocs(fsQuery(
-                    collection(db, 'attempts'),
-                    where('userId', '==', user.uid)
-                ));
-
+                // Uses localStorage to track the attemptId (single doc read instead of collection query)
                 var existingAttempt = null;
-                userAttemptsSnap.forEach(function(d) {
-                    var data = d.data();
-                    if (data.testId === testId && data.status === 'in_progress') {
-                        // If multiple in-progress attempts exist, use the most recent one
-                        if (!existingAttempt || (data.startedAt && existingAttempt.data.startedAt &&
-                            data.startedAt.seconds > existingAttempt.data.startedAt.seconds)) {
-                            existingAttempt = { id: d.id, data: data };
+                var savedAttemptId = null;
+                try { savedAttemptId = localStorage.getItem('quiz_attempt_' + testId); } catch(e) {}
+
+                if (savedAttemptId) {
+                    console.log('[Quiz] Found saved attemptId in localStorage:', savedAttemptId);
+                    var attemptDoc = await getDoc(doc(db, 'attempts', savedAttemptId));
+                    if (attemptDoc.exists()) {
+                        var ad = attemptDoc.data();
+                        if (ad.status === 'in_progress' && ad.userId === user.uid) {
+                            existingAttempt = { id: savedAttemptId, data: ad };
                         }
                     }
-                });
+                }
 
                 // If the existing attempt has expired (time ran out), auto-submit it and start fresh
                 if (existingAttempt) {
@@ -303,6 +299,8 @@
                     var attempt = await createAttempt(user.uid, testId, questions);
                     attemptId = attempt.id;
                     answers = attempt.answers;
+                    // Save attemptId for fast resume on page reload
+                    try { localStorage.setItem('quiz_attempt_' + testId, attemptId); } catch(e) {}
                 }
 
                 // Init timer
@@ -438,6 +436,7 @@
                     try {
                         await submitAttempt(attemptId, answers, timedOut ? 0 : timer.remainingSeconds, timer.totalSeconds);
                         clearQuizState(attemptId);
+                        try { localStorage.removeItem('quiz_attempt_' + testId); } catch(e) {}
                         if (timedOut) {
                             showToast('Time is up! Your test has been submitted.', 'warning');
                         }
@@ -450,6 +449,7 @@
                         try {
                             await submitAttempt(attemptId, answers, timedOut ? 0 : timer.remainingSeconds, timer.totalSeconds);
                             clearQuizState(attemptId);
+                        try { localStorage.removeItem('quiz_attempt_' + testId); } catch(e) {}
                             navigateTo('/results.html?attemptId=' + attemptId);
                         } catch (e2) {
                             showToast('Submit failed. Your answers are saved locally.', 'error');

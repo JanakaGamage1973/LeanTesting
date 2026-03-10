@@ -242,11 +242,14 @@
         });
 
         async function loadTests() {
-            const [testsSnap, questionsSnap, attemptsSnap] = await Promise.all([
+            const [testsSnap, questionsSnap, completedSnap, timedOutSnap] = await Promise.all([
                 getDocs(collection(db, 'tests')),
                 getDocs(collection(db, 'questions')),
-                getDocs(collection(db, 'attempts'))
+                getDocs(query(collection(db, 'attempts'), where('status', '==', 'completed'))),
+                getDocs(query(collection(db, 'attempts'), where('status', '==', 'timed_out')))
             ]);
+            // Merge completed + timed_out into a single virtual snapshot
+            const attemptsSnap = { forEach: function(fn) { completedSnap.forEach(fn); timedOutSnap.forEach(fn); } };
 
             const listEl = document.getElementById('tests-list');
             const emptyEl = document.getElementById('empty-tests');
