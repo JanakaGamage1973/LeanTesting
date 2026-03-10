@@ -124,11 +124,25 @@
                 var hasNavigated = false;
 
                 // Look up test by share code
+                // Try exact match first, then try with spaces replaced by hyphens (or vice versa)
+                // This handles both old links (with spaces/%20) and new links (with hyphens)
                 var testsSnap = await getDocs(query(
                     collection(db, 'tests'),
                     where('shareCode', '==', shareCode),
                     where('isActive', '==', true)
                 ));
+
+                if (testsSnap.empty) {
+                    // Try alternate form: spaces↔hyphens
+                    var altCode = shareCode.indexOf('-') >= 0
+                        ? shareCode.replace(/-/g, ' ')
+                        : shareCode.replace(/\s+/g, '-');
+                    testsSnap = await getDocs(query(
+                        collection(db, 'tests'),
+                        where('shareCode', '==', altCode),
+                        where('isActive', '==', true)
+                    ));
+                }
 
                 if (testsSnap.empty) {
                     document.getElementById('loading').classList.add('hidden');

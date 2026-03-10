@@ -139,6 +139,11 @@
             await loadTests();
         } catch (e) { console.error(e); }
 
+        // Auto-replace spaces with hyphens in share code
+        document.getElementById('test-code').addEventListener('input', (e) => {
+            e.target.value = e.target.value.replace(/\s+/g, '-');
+        });
+
         // Validate distribution
         function validateDistribution() {
             const total = parseInt(document.getElementById('test-total').value) || 0;
@@ -196,7 +201,7 @@
 
             try {
                 const editId = document.getElementById('edit-test-id').value;
-                const shareCode = document.getElementById('test-code').value.trim();
+                const shareCode = document.getElementById('test-code').value.trim().replace(/\s+/g, '-');
                 const folderId = document.getElementById('test-folder-id').value;
                 if (!folderId) {
                     showToast('Please select a question folder', 'warning');
@@ -386,7 +391,7 @@
                         <div class="mt-4 pt-3 border-t border-slate-100">
                             <div class="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2">
                                 <span class="material-symbols-outlined text-[14px] text-slate-400">link</span>
-                                <input type="text" readonly value="${window.location.origin}${BASE_PATH}/t.html?code=${test.shareCode}" class="flex-1 bg-transparent text-[11px] text-slate-600 outline-none truncate" id="link-${d.id}" />
+                                <input type="text" readonly value="${window.location.origin}${BASE_PATH}/t.html?code=${encodeURIComponent(test.shareCode)}" class="flex-1 bg-transparent text-[11px] text-slate-600 outline-none truncate" id="link-${d.id}" />
                                 <button onclick="window.__copyLink('${d.id}')" class="text-[10px] text-primary font-bold hover:underline flex items-center gap-1 whitespace-nowrap">
                                     <span class="material-symbols-outlined text-[14px]">content_copy</span> Copy Link
                                 </button>
