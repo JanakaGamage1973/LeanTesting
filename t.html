@@ -133,15 +133,26 @@
                 ));
 
                 if (testsSnap.empty) {
-                    // Try alternate form: spaces↔hyphens
-                    var altCode = shareCode.indexOf('-') >= 0
-                        ? shareCode.replace(/-/g, ' ')
-                        : shareCode.replace(/\s+/g, '-');
-                    testsSnap = await getDocs(query(
-                        collection(db, 'tests'),
-                        where('shareCode', '==', altCode),
-                        where('isActive', '==', true)
-                    ));
+                    // Try alternate forms: spaces↔hyphens, uppercase, lowercase
+                    var variants = new Set();
+                    var withSpaces = shareCode.replace(/-/g, ' ');
+                    var withHyphens = shareCode.replace(/\s+/g, '-');
+                    variants.add(withSpaces);
+                    variants.add(withHyphens);
+                    variants.add(withSpaces.toUpperCase());
+                    variants.add(withHyphens.toUpperCase());
+                    variants.add(withSpaces.toLowerCase());
+                    variants.add(withHyphens.toLowerCase());
+                    variants.delete(shareCode); // already tried
+
+                    for (var variant of variants) {
+                        testsSnap = await getDocs(query(
+                            collection(db, 'tests'),
+                            where('shareCode', '==', variant),
+                            where('isActive', '==', true)
+                        ));
+                        if (!testsSnap.empty) break;
+                    }
                 }
 
                 if (testsSnap.empty) {
